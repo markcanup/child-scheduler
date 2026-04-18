@@ -38,6 +38,23 @@ Resources:
             Path: /hubitat/action-catalog
             Method: POST
 
+  HubitatScheduleGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: functions/hubitat_schedule_get/handler.lambda_handler
+      Description: GET /hubitat/schedule
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: Schedules
+      Events:
+        HubitatScheduleGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ChildSchedulerApi
+            Path: /hubitat/schedule
+            Method: GET
+
   CatalogGetFunction:
     Type: AWS::Serverless::Function
     Properties:
