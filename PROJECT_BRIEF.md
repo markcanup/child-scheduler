@@ -39,6 +39,7 @@ Build a cloud-hosted scheduling system to manage children’s wake-up times, bed
 - Backend compiles schedule → Hubitat executes only
 - Full-replace model for schedule config
 - Broken references explicitly surfaced
+- v1 scope is one user with one hub (single-tenant for now)
 
 ---
 
@@ -172,6 +173,19 @@ Constraints:
 
 ## Schedule Model
 
+### META
+
+{
+  "scheduleVersion": number,
+  "compiledAt": "ISO-8601 timestamp",
+  "timezone": "America/New_York"
+}
+
+Constraints:
+- `timezone` is fixed to `America/New_York` for v1
+- Future enhancement: Hubitat catalog updates may include hub timezone and update META
+- `scheduleVersion` increments on every recompile (including recompiles triggered by catalog updates)
+
 ### Schedule Definition (DEF)
 
 {
@@ -266,6 +280,11 @@ Item types:
 POST /hubitat/action-catalog  
 GET /hubitat/schedule  
 
+Hubitat schedule query contract:
+- `days` must be an integer between 1 and 90
+- Day window is full-day based, beginning with current day in `META.timezone` as day 1
+- Include all events for each included day, including already-past events from today
+
 ### UI
 
 GET /catalog  
@@ -282,6 +301,8 @@ PUT /schedule/config
 - Validate actions against catalog
 - Detect broken references
 - Output EVT and BROKEN items
+- Recompile when schedule config is saved (`PUT /schedule/config`)
+- Recompile when action catalog is updated (`POST /hubitat/action-catalog`)
 
 ---
 
@@ -289,6 +310,33 @@ PUT /schedule/config
 
 - Hubitat: X-Hubitat-Token
 - UI: Cognito JWT
+
+Hubitat token operational policy (v1):
+- PSK is managed via a UI preference/profile field and stored by AWS backend
+- Saving PSK via UI also updates PSK last-rotated timestamp
+- PSK timestamp is visible in UI
+- Rotate annually
+- UI should show a warning when key age reaches 365 days; do not hard-stop solely due to age
+
+---
+
+## Error Contract
+
+Use a common error shape for validation and business-rule failures (including circular relative schedule references):
+
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Human-readable explanation"
+  }
+}
+
+---
+
+## Broken Reference Notification Policy
+
+- Broken references should be surfaced once per `scheduleVersion`
+- Broken-reference de-duplication key: `sourceScheduleId + date`
 
 ---
 
