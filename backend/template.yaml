@@ -72,6 +72,25 @@ Resources:
             Path: /schedule/config
             Method: GET
 
+  ScheduleConfigPutFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: functions/schedule_config_put/handler.lambda_handler
+      Description: PUT /schedule/config
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: Schedules
+        - DynamoDBReadPolicy:
+            TableName: ActionCatalogs
+      Events:
+        ScheduleConfigPut:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ChildSchedulerApi
+            Path: /schedule/config
+            Method: PUT
+
 Outputs:
   ApiUrl:
     Description: HTTP API endpoint

@@ -32,3 +32,5 @@ sam deploy --guided
 - Milestone 1: `POST /hubitat/action-catalog` implemented with tests
 - Milestone 2: `GET /catalog` implemented with tests
 - Milestone 3: `GET /schedule/config` implemented with tests
+- Milestone 4: compiler implemented with pure functions and tests
+- Milestone 5: `PUT /schedule/config` implemented with tests
