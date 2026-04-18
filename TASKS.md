@@ -14,6 +14,9 @@ Build the AWS side of the Child Scheduler system.
 
 Codex should work milestone-by-milestone, keep changes small, and avoid speculative refactors.
 
+v1 scope assumption:
+- exactly one user and one hub (single-tenant, single-hub)
+
 ---
 
 ## Repo Structure
@@ -54,6 +57,18 @@ Expected repo layout:
    - 7-day compile window
    - no GSIs initially
 8. Use repo-local Codex guidance/config if added later.
+9. Use optimistic locking with `scheduleVersion` where practical; concurrency risk is minimal in v1.
+   - `scheduleVersion` must increment on every recompile.
+10. Set `META.timezone = "America/New_York"` for v1.
+11. Use the common error contract:
+    ```json
+    {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Human-readable explanation"
+      }
+    }
+    ```
 
 ---
 
@@ -107,6 +122,7 @@ Allow Hubitat to push the action catalog into DynamoDB.
 - Validate uniqueness of `resourceId` within payload
 - Build `resourceIndex` from `resources`
 - Upsert into `ActionCatalogs`
+- Trigger `compile_schedule(...)` after successful catalog write so schedule reflects new catalog validity immediately
 - Return:
   - `hubId`
   - `status`
@@ -118,6 +134,7 @@ Allow Hubitat to push the action catalog into DynamoDB.
   - missing required fields
   - duplicate resource IDs
   - invalid token
+  - recompilation triggered on catalog change
 
 ### Deliverable
 Working Lambda for catalog upsert with tests.
@@ -229,6 +246,7 @@ Add tests for:
 - day override with `timeOverride`
 - day override with `enabled = false`
 - circular dependency detection
+- circular dependency emits common error shape
 
 #### Action validation
 - valid `rule`
@@ -268,6 +286,8 @@ Save editable schedule config and compile the next 7 days.
 - Load current `META` item
 - Determine next `scheduleVersion`
 - Call `compile_schedule(...)`
+- Apply optimistic locking via `scheduleVersion` check (best-effort; low contention expected in v1)
+- Increment `scheduleVersion` on every recompile
 - Replace current editable config:
   - delete existing `DEF#...`
   - write new `DEF#...`
@@ -279,6 +299,7 @@ Save editable schedule config and compile the next 7 days.
   - write new `EVT#...`
   - write new `BROKEN#...`
 - Upsert new `META`
+  - include `timezone = "America/New_York"`
 - Return:
   - `hubId`
   - `status`
@@ -311,6 +332,10 @@ Allow Hubitat to pull the compiled schedule for the next N days.
 ### Tasks
 - Implement handler: `hubitat_schedule_get`
 - Validate Hubitat shared secret
+- Validate `days` query:
+  - integer only
+  - min 1
+  - max 90
 - Read:
   - `META`
   - `EVT#...` in requested window
@@ -328,6 +353,10 @@ Allow Hubitat to pull the compiled schedule for the next N days.
   - `scheduleVersion`
   - `timezone`
   - `events`
+- Response window semantics:
+  - day-based window starting with current day in `META.timezone` as day 1
+  - include full-day events for each included day
+  - include already-past events from today
 
 ### Tests
 - compiled events only
@@ -335,6 +364,8 @@ Allow Hubitat to pull the compiled schedule for the next N days.
 - empty result
 - invalid token
 - invalid/missing hubId
+- invalid `days` values (non-integer, <1, >90)
+- includes past events from current day
 
 ### Deliverable
 Working Hubitat schedule pull endpoint.
@@ -355,10 +386,12 @@ Deploy backend routes cleanly.
   - `PUT /schedule/config`
 - Add environment variable handling for:
   - DynamoDB table names
-  - shared Hubitat token or token lookup mechanism
   - allowed origin(s)
 - Add basic CORS for browser routes
 - Add deployment docs
+  - document PSK storage on AWS side backing the UI preference/profile field
+  - document annual PSK rotation process
+  - document UI-only 365-day key-age warning mechanism (non-breaking)
 
 ### Deliverable
 Deployed backend API skeleton with routes mapped to Lambdas.
@@ -382,6 +415,8 @@ Create a thin UI that can consume real backend data.
   - catalog status/debug page
   - schedule config viewer
   - save config action
+  - profile/preferences section for Hubitat PSK
+  - visible PSK last-rotated timestamp
 - Do not over-polish UI yet
 
 ### Deliverable
@@ -399,6 +434,7 @@ Secure browser-facing endpoints.
 - Add frontend auth flow
 - Wire JWT auth into browser routes
 - Ensure Hubitat routes remain on shared-secret auth path
+- Add authenticated UI flow for viewing/updating Hubitat PSK profile field
 - Add notes for local development vs deployed environments
 
 ### Deliverable
@@ -438,6 +474,7 @@ Make the system maintainable.
 - Add structured logging
 - Add input sanitization for `text` fields
 - Add duplicate-notification suppression strategy for broken references
+  - v1 dedupe key: `sourceScheduleId + date`
 - Add admin notification separation if not already implemented
 - Add retry-safe/idempotent behavior where useful
 - Improve docs
@@ -468,6 +505,8 @@ Do not add these unless explicitly requested:
 - GraphQL
 - aggressive single-table DynamoDB redesign
 - extra AWS services unless needed
+
+Note: DynamoDB volume is expected to be very low in v1 (single user/hub), reinforcing no-GSI baseline.
 
 ---
 
