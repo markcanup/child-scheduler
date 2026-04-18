@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Child Scheduler backend services
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 10
+    MemorySize: 256
+    Environment:
+      Variables:
+        ACTION_CATALOGS_TABLE: ActionCatalogs
+        SCHEDULES_TABLE: Schedules
+        HUBITAT_TOKEN: change-me
+        UI_JWT_STUB_TOKEN: dev-ui-token
+        DEFAULT_HUB_ID: default-hub
+
+Resources:
+  ChildSchedulerApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+
+  HubitatActionCatalogPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: functions/hubitat_action_catalog_post/handler.lambda_handler
+      Description: POST /hubitat/action-catalog
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: ActionCatalogs
+      Events:
+        HubitatActionCatalogPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ChildSchedulerApi
+            Path: /hubitat/action-catalog
+            Method: POST
+
+  CatalogGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: functions/catalog_get/handler.lambda_handler
+      Description: GET /catalog
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: ActionCatalogs
+      Events:
+        CatalogGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ChildSchedulerApi
+            Path: /catalog
+            Method: GET
+
+  ScheduleConfigGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: functions/schedule_config_get/handler.lambda_handler
+      Description: GET /schedule/config
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: Schedules
+      Events:
+        ScheduleConfigGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ChildSchedulerApi
+            Path: /schedule/config
+            Method: GET
+
+Outputs:
+  ApiUrl:
+    Description: HTTP API endpoint
+    Value: !Sub https://${ChildSchedulerApi}.execute-api.${AWS::Region}.amazonaws.com/prod/
