@@ -1,4 +1,4 @@
-# Child Scheduler – Project Brief
+# PROJECT_BRIEF.md
 
 ## Goal
 
@@ -33,12 +33,12 @@ Build a cloud-hosted scheduling system to manage children’s wake-up times, bed
 
 ## Key Design Principles
 
-- Hubitat is **execution engine only**
-- AWS is **source of truth + scheduler**
+- Hubitat is execution engine only
+- AWS is source of truth + scheduler
 - No inbound access to home network
 - Backend compiles schedule → Hubitat executes only
-- Full-replace model for schedule config (simplifies logic)
-- Broken references handled explicitly and surfaced to user
+- Full-replace model for schedule config
+- Broken references explicitly surfaced
 
 ---
 
@@ -48,11 +48,11 @@ Build a cloud-hosted scheduling system to manage children’s wake-up times, bed
 - Can schedule one-time executions locally
 - Can invoke Rule Machine rules via RMUtils
 - Can execute:
-  - `rule` → Rule Machine
-  - `speech` → `device.speak(text)`
-  - `notify` → `device.deviceNotification(text)`
+  - rule → Rule Machine
+  - speech → device.speak(text)
+  - notify → device.deviceNotification(text)
 - Can expose:
-  - selected Rule Machine rules (filtered)
+  - selected Rule Machine rules
   - selected speech devices
   - selected notification devices
 
@@ -60,242 +60,177 @@ Build a cloud-hosted scheduling system to manage children’s wake-up times, bed
 
 ## Action Types
 
-### 1. Rule
-- Executes a Rule Machine rule
-- Parameter:
-  - `targetId: "rule:<id>"`
+### Rule
+- Executes Rule Machine rule
+- targetId: "rule:<id>"
 
-### 2. Speech
-- Sends text to a speech-capable device
-- Parameters:
-  - `targetId: "speechTarget:<id>"`
-  - `text`
+### Speech
+- targetId: "speechTarget:<id>"
+- text
 
-### 3. Notify
-- Sends text notification
-- Parameters:
-  - `targetIds: ["notifyDevice:<id>", ...]`
-  - `text`
+### Notify
+- targetIds: ["notifyDevice:<id>", ...]
+- text
 
-### 4. Broken Reference
+### Broken Reference
 - Represents invalid/missing action
-- Hubitat will notify user
+- Hubitat notifies user
 
 ---
 
 ## Action Catalog
 
-### Owned by Hubitat
-Hubitat builds and pushes catalog to AWS.
+Owned by Hubitat.
 
-### Contents
-- action definitions
-- available resources:
-  - rule actions (filtered by prefix, e.g. "ZCSA")
-  - speech targets
-  - notify devices
-
-### Key Properties
-- `resourceId` format:
-  - `rule:<id>`
-  - `speechTarget:<id>`
-  - `notifyDevice:<id>`
+Includes:
+- actionDefinitions
+- resources:
+  - rule:<id>
+  - speechTarget:<id>
+  - notifyDevice:<id>
 
 ---
 
 ## Schedule Model
 
 ### Schedule Definition (DEF)
-Reusable rule describing:
-- when something should happen
-- what action to run
 
-Fields:
-- `scheduleId`
-- `name`
-- `enabled`
-- `daysOfWeek`
-- `timeMode`:
-  - `absolute` → uses `baseTime`
-  - `relative` → uses `relativeToScheduleId` + `offsetMinutes`
-- `actionType`
-- `parameters`
+- scheduleId
+- name
+- enabled
+- daysOfWeek
+- timeMode (absolute | relative)
+- baseTime
+- relativeToScheduleId
+- offsetMinutes
+- actionType
+- parameters
 
 ---
 
 ### Day Config (DAY)
-Overrides for specific dates:
 
-Fields:
-- `date`
-- `schoolDay`
-- `notes`
-- `overrides`:
-  - enable/disable schedule
-  - override time
+- date
+- schoolDay
+- notes
+- overrides:
+  - enabled
+  - timeOverride
 
 ---
 
 ### Compiled Events (EVT)
-Fully resolved execution events:
 
-Fields:
-- `eventId`
-- `date`
-- `time`
-- `actionType`
-- `parameters`
-- `sourceScheduleId`
+- eventId
+- date
+- time
+- actionType
+- parameters
+- sourceScheduleId
 
 ---
 
 ### Broken References (BROKEN)
-Events that cannot be executed:
 
-Fields:
-- `eventId`
-- `date`
-- `time` (optional)
-- `message`
-- `originalLabel`
-- `sourceScheduleId`
+- eventId
+- date
+- message
+- originalLabel
+- sourceScheduleId
 
 ---
 
 ## DynamoDB Tables
 
-### 1. ActionCatalogs
+### ActionCatalogs
 
-**Primary Key**
-- `hubId` (String)
-
-**Purpose**
-- Stores latest action catalog per hub
+- PK: hubId (String)
 
 ---
 
-### 2. Schedules
+### Schedules
 
-**Primary Key**
-- `hubId` (String)
-- `itemKey` (String)
+- PK: hubId (String)
+- SK: itemKey (String)
 
-**Item Types**
-- `META`
-- `DEF#<scheduleId>`
-- `DAY#<YYYY-MM-DD>`
-- `EVT#<date>#<time>#<eventId>`
-- `BROKEN#<date>#<eventId>`
+Item types:
+- META
+- DEF#<scheduleId>
+- DAY#<date>
+- EVT#<date>#<time>#<eventId>
+- BROKEN#<date>#<eventId>
 
 ---
 
 ## API Endpoints
 
-### Hubitat Endpoints
+### Hubitat
 
-#### POST /hubitat/action-catalog
-- Hubitat pushes available actions/resources
-- Writes to `ActionCatalogs`
+POST /hubitat/action-catalog  
+GET /hubitat/schedule  
 
-#### GET /hubitat/schedule
-- Hubitat pulls compiled schedule
-- Reads:
-  - META
-  - EVT
-  - BROKEN
+### UI
 
----
-
-### Web UI Endpoints
-
-#### GET /catalog
-- Returns action catalog for UI
-- Reads `ActionCatalogs`
-
-#### GET /schedule/config
-- Returns editable schedule + preview
-- Reads:
-  - META
-  - DEF
-  - DAY
-  - EVT (preview)
-  - BROKEN
-
-#### PUT /schedule/config
-- Saves config and compiles schedule
-- Writes:
-  - META
-  - DEF
-  - DAY
-  - EVT
-  - BROKEN
+GET /catalog  
+GET /schedule/config  
+PUT /schedule/config  
 
 ---
 
 ## Compiler Responsibilities
 
-### Inputs
-- schedule definitions
-- day configs
-- action catalog
-
-### Outputs
-- compiled events (EVT)
-- broken references (BROKEN)
-
----
-
-### Rules
-
-#### 1. Compile window
-- Next 7 days only
-
-#### 2. Schedule selection
-- match day-of-week
-- apply overrides
-
-#### 3. Time resolution
-- absolute → baseTime or override
-- relative → dependency + offset
-- detect circular dependencies
-
-#### 4. Action validation
-- verify resource exists in catalog
-- verify correct type
-- verify required parameters
-
-#### 5. Broken handling
-- invalid targets → BROKEN item
-- missing dependencies → BROKEN item
-- circular dependencies → BROKEN item
+- Compile next 7 days
+- Resolve absolute and relative times
+- Apply overrides
+- Validate actions against catalog
+- Detect broken references
+- Output EVT and BROKEN items
 
 ---
 
 ## Authentication
 
-### Hubitat
-- Header: `X-Hubitat-Token`
-
-### Web UI
-- Cognito JWT
+- Hubitat: X-Hubitat-Token
+- UI: Cognito JWT
 
 ---
 
-## Repository Structure
+## Repo Structure
 
-```text
-child-scheduler/
-  PROJECT_BRIEF.md
-  TASKS.md
+    child-scheduler/
+      PROJECT_BRIEF.md
+      TASKS.md
 
-  backend/
-    shared/
-    functions/
+      backend/
+      ui/
+      hubitat/
+      docs/
 
-  ui/
-    src/
+---
 
-  hubitat/
-    ChildSchedulerHub.groovy
+## Implementation Plan
 
-  docs/
+1. Action catalog endpoint
+2. Catalog retrieval
+3. Schedule read endpoint
+4. Compiler
+5. Schedule write endpoint
+6. Hubitat schedule endpoint
+
+---
+
+## Current Status
+
+- Hubitat prototype complete and validated
+- Scheduling, rule execution, speech, notify all working
+- AWS backend not yet implemented
+- UI not yet implemented
+
+---
+
+## Next Step
+
+Use Codex to begin backend implementation starting with:
+
+- POST /hubitat/action-catalog
+- GET /catalog
