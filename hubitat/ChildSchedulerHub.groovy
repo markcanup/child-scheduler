@@ -115,8 +115,16 @@ preferences {
         section("Current state") {
             paragraph "Last catalog push: ${state.lastCatalogPushTime ?: 'none'}"
             paragraph "Last catalog push status: ${state.lastCatalogPushStatus ?: 'none'}"
+            paragraph "Last catalog push URL: ${state.lastCatalogPushUrl ?: 'none'}"
+            paragraph "Last catalog push request bytes: ${state.lastCatalogPushRequestBytes ?: 'none'}"
+            paragraph "Last catalog push response body: ${state.lastCatalogPushResponseBody ?: 'none'}"
+            paragraph "Last catalog push error: ${state.lastCatalogPushError ?: 'none'}"
             paragraph "Last schedule pull: ${state.lastSchedulePullTime ?: 'none'}"
             paragraph "Last schedule pull status: ${state.lastSchedulePullStatus ?: 'none'}"
+            paragraph "Last schedule pull URL: ${state.lastSchedulePullUrl ?: 'none'}"
+            paragraph "Last schedule pull response body: ${state.lastSchedulePullResponseBody ?: 'none'}"
+            paragraph "Last schedule pull error: ${state.lastSchedulePullError ?: 'none'}"
+            paragraph "Last pulled event count: ${state.lastSchedulePullEventCount ?: 0}"
             paragraph "Last schedule version: ${state.lastScheduleVersion ?: 'none'}"
             paragraph "Pending scheduled events count: ${state.pendingEvents?.size() ?: 0}"
             paragraph "Pending scheduled events: ${state.pendingEvents ?: []}"
@@ -373,7 +381,11 @@ def pushActionCatalog() {
         return
     }
     
-    String url = normalizeBaseUrl(awsBaseUrl) + "/api/hubitat/action-catalog"
+    String url = normalizeBaseUrl(awsBaseUrl) + "/hubitat/action-catalog"
+    String requestBodyJson = JsonOutput.toJson(catalog)
+    state.lastCatalogPushUrl = url
+    state.lastCatalogPushRequestBytes = requestBodyJson?.getBytes("UTF-8")?.size() ?: 0
+    state.lastCatalogPushError = null
 
     try {
         def params = [
@@ -390,13 +402,18 @@ def pushActionCatalog() {
         httpPost(params) { resp ->
             state.lastCatalogPushTime = formatNowIso()
             state.lastCatalogPushStatus = "HTTP ${resp.status}"
+            state.lastCatalogPushResponseBody = summarizeResponseBody(resp?.data)
             log.info "Catalog push response status: ${resp.status}"
+            if (resp.status >= 400) {
+                log.warn "Catalog push non-200 response body: ${state.lastCatalogPushResponseBody}"
+            }
         }
 
         log.info "Pushed action catalog with ${catalog.resources?.size() ?: 0} resources"
     } catch (Exception e) {
         state.lastCatalogPushTime = formatNowIso()
         state.lastCatalogPushStatus = "error"
+        state.lastCatalogPushError = e.message
         log.error "Catalog push failed: ${e.message}"
     }
 }
@@ -421,7 +438,9 @@ Map pullSchedule() {
     }
 
     Integer days = scheduleDaysToPull != null ? scheduleDaysToPull as Integer : 7
-    String url = normalizeBaseUrl(awsBaseUrl) + "/api/hubitat/schedule?hubId=${hubId}&days=${days}"
+    String url = normalizeBaseUrl(awsBaseUrl) + "/hubitat/schedule?hubId=${hubId}&days=${days}"
+    state.lastSchedulePullUrl = url
+    state.lastSchedulePullError = null
 
     try {
         def params = [
@@ -438,6 +457,7 @@ Map pullSchedule() {
         httpGet(params) { resp ->
             state.lastSchedulePullTime = formatNowIso()
             state.lastSchedulePullStatus = "HTTP ${resp.status}"
+            state.lastSchedulePullResponseBody = summarizeResponseBody(resp?.data)
 
             if (resp.status == 200) {
                 if (resp.data instanceof Map) {
@@ -445,20 +465,46 @@ Map pullSchedule() {
                 } else {
                     result = new JsonSlurper().parseText(resp.data.toString())
                 }
+            } else {
+                log.warn "Schedule pull non-200 response body: ${state.lastSchedulePullResponseBody}"
             }
         }
 
         if (result) {
+            state.lastSchedulePullEventCount = result.events?.size() ?: 0
             log.info "Pulled schedule version ${result.scheduleVersion ?: 'unknown'} with ${result.events?.size() ?: 0} events"
+        } else {
+            state.lastSchedulePullEventCount = 0
         }
 
         return result
     } catch (Exception e) {
         state.lastSchedulePullTime = formatNowIso()
         state.lastSchedulePullStatus = "error"
+        state.lastSchedulePullError = e.message
         log.error "Schedule pull failed: ${e.message}"
         return null
     }
+}
+
+String summarizeResponseBody(def body) {
+    if (body == null) {
+        return "none"
+    }
+
+    String raw
+    if (body instanceof Map || body instanceof List) {
+        raw = JsonOutput.toJson(body)
+    } else {
+        raw = body.toString()
+    }
+
+    Integer maxLength = 500
+    if (raw.size() > maxLength) {
+        return raw.substring(0, maxLength) + "... (truncated)"
+    }
+
+    return raw
 }
 
 /* =========================
