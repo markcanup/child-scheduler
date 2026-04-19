@@ -1,0 +1,26 @@
+profile = "default"
+
+[tools]
+web_search = true
+
+[profiles.default]
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+# Keep Codex grounded in repo docs first.
+model_reasoning_effort = "medium"
+
+# Prefer project docs over guessing.
+model_instructions = """
+Read PROJECT_BRIEF.md and TASKS.md before making changes.
+
+Working rules:
+- Do not redesign the architecture unless implementation requires it.
+- Follow the API contracts and DynamoDB model in PROJECT_BRIEF.md.
+- Keep changes small and milestone-based.
+- Prefer pure functions and tests for compiler logic.
+- Do not run npm install or npm ci during normal task execution; dependencies are installed during setup.
+- For frontend validation, use already-installed dependencies only.
+- For backend work, add or update tests whenever practical.
+- Stop after completing the requested milestone and summarize what changed.
+"""

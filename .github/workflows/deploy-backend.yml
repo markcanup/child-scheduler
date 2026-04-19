@@ -1,0 +1,62 @@
+name: Deploy backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+
+workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      AWS_REGION: us-east-2
+      AWS_DEFAULT_REGION: us-east-2
+      SAM_TEMPLATE: template.yaml
+      STACK_NAME: child-scheduler-backend
+      S3_BUCKET: ${{ vars.SAM_DEPLOY_BUCKET }}
+      CAPABILITIES: CAPABILITY_IAM
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-sam-deploy
+
+      - name: Validate SAM template
+        run: sam validate --template-file $SAM_TEMPLATE
+
+      - name: Build SAM application
+        run: sam build --template-file $SAM_TEMPLATE
+
+      - name: Deploy SAM application
+        run: |
+          sam deploy \
+            --template-file .aws-sam/build/template.yaml \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --s3-bucket "$S3_BUCKET" \
+            --capabilities "$CAPABILITIES" \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
