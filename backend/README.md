@@ -18,6 +18,8 @@ PYTHONPATH=backend pytest -q backend/tests
 
 `template.yaml` includes the current Lambda functions and HTTP API routes.
 
+Milestone 7 wiring details (API routes, CORS, and environment parameters) are documented in `backend/DEPLOYMENT.md`.
+
 Example commands:
 
 ```bash
@@ -35,3 +37,4 @@ sam deploy --guided
 - Milestone 4: compiler implemented with pure functions and tests
 - Milestone 5: `PUT /schedule/config` implemented with tests
 - Milestone 6: `GET /hubitat/schedule` implemented with tests
+- Milestone 7: API Gateway wiring + environment configuration + deployment docs
