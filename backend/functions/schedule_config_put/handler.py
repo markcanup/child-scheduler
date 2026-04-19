@@ -73,11 +73,11 @@ def _replace_items(schedules_table: Any, hub_id: str, compile_result: Dict[str, 
 
 def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
     try:
-        validate_ui_auth(event)
+        claims = validate_ui_auth(event)
         payload = _parse_json_body(event)
 
         _require_fields(payload, ["meta", "scheduleDefinitions", "dayConfigs"])
-        hub_id = payload.get("hubId") or resolve_ui_hub_id(event)
+        hub_id = payload.get("hubId") or resolve_ui_hub_id(event, claims)
 
         catalog_table = get_action_catalogs_table()
         catalog_item = catalog_table.get_item(Key={"hubId": hub_id}).get("Item")

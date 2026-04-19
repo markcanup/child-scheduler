@@ -90,3 +90,27 @@ pre {
   color: #92400e;
   font-weight: 600;
 }
+
+
+.row.wrap {
+  flex-wrap: wrap;
+}
+
+.button-link {
+  border: 1px solid #d1d5db;
+  background: #111827;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.disabled-link {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

@@ -26,6 +26,19 @@ Parameters:
     Type: String
     Default: http://localhost:3000
     Description: Comma-separated list of browser origins allowed for CORS requests.
+  CognitoIssuerUrl:
+    Type: String
+    Default: ""
+    Description: Optional Cognito issuer URL for JWT auth (example: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_ABC123)
+  CognitoAppClientId:
+    Type: String
+    Default: ""
+    Description: Optional Cognito App Client ID (audience) for API Gateway JWT auth.
+
+Conditions:
+  UseCognitoAuthorizer: !And
+    - !Not [!Equals [!Ref CognitoIssuerUrl, ""]]
+    - !Not [!Equals [!Ref CognitoAppClientId, ""]]
 
 Globals:
   Function:
@@ -55,6 +68,16 @@ Resources:
           - PUT
           - POST
           - OPTIONS
+      Auth: !If
+        - UseCognitoAuthorizer
+        - Authorizers:
+            CognitoJwtAuthorizer:
+              IdentitySource: "$request.header.Authorization"
+              JwtConfiguration:
+                issuer: !Ref CognitoIssuerUrl
+                audience:
+                  - !Ref CognitoAppClientId
+        - !Ref AWS::NoValue
 
   HubitatActionCatalogPostFunction:
     Type: AWS::Serverless::Function
@@ -106,6 +129,8 @@ Resources:
             ApiId: !Ref ChildSchedulerApi
             Path: /catalog
             Method: GET
+            Auth:
+              Authorizer: !If [UseCognitoAuthorizer, CognitoJwtAuthorizer, NONE]
 
   ScheduleConfigGetFunction:
     Type: AWS::Serverless::Function
@@ -123,6 +148,8 @@ Resources:
             ApiId: !Ref ChildSchedulerApi
             Path: /schedule/config
             Method: GET
+            Auth:
+              Authorizer: !If [UseCognitoAuthorizer, CognitoJwtAuthorizer, NONE]
 
   ScheduleConfigPutFunction:
     Type: AWS::Serverless::Function
@@ -142,6 +169,8 @@ Resources:
             ApiId: !Ref ChildSchedulerApi
             Path: /schedule/config
             Method: PUT
+            Auth:
+              Authorizer: !If [UseCognitoAuthorizer, CognitoJwtAuthorizer, NONE]
 
 Outputs:
   ApiUrl:

@@ -13,7 +13,7 @@ function defaultPayload() {
   };
 }
 
-export default function ScheduleConfigPanel() {
+export default function ScheduleConfigPanel({ authToken }) {
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
   const [jsonText, setJsonText] = useState(JSON.stringify(defaultPayload(), null, 2));
@@ -22,7 +22,7 @@ export default function ScheduleConfigPanel() {
     setStatus("loading");
     setMessage("");
     try {
-      const data = await getScheduleConfig();
+      const data = await getScheduleConfig(authToken);
       setJsonText(JSON.stringify(data, null, 2));
       setStatus("success");
     } catch (err) {
@@ -45,7 +45,7 @@ export default function ScheduleConfigPanel() {
     }
 
     try {
-      const response = await putScheduleConfig(payload);
+      const response = await putScheduleConfig(payload, authToken);
       setStatus("success");
       setMessage(`Saved scheduleVersion ${response.scheduleVersion}.`);
     } catch (err) {
@@ -58,14 +58,15 @@ export default function ScheduleConfigPanel() {
     <section className="card">
       <h2>Schedule Config Viewer</h2>
       <div className="row">
-        <button type="button" onClick={loadScheduleConfig}>
+        <button type="button" onClick={loadScheduleConfig} disabled={!authToken}>
           Load schedule config
         </button>
-        <button type="button" onClick={saveScheduleConfig}>
+        <button type="button" onClick={saveScheduleConfig} disabled={!authToken}>
           Save schedule config
         </button>
         <span className="muted">Status: {status}</span>
       </div>
+      {!authToken && <p className="warning">Sign in first to load or save schedule config.</p>}
       {message && <p className={status === "error" ? "error" : "ok"}>{message}</p>}
       <textarea
         aria-label="Schedule config JSON"
