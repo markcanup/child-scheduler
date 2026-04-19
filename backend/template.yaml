@@ -29,7 +29,7 @@ Parameters:
   CognitoIssuerUrl:
     Type: String
     Default: ""
-    Description: Optional Cognito issuer URL for JWT auth (example: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_ABC123)
+    Description: "Optional Cognito issuer URL for JWT auth (example: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_ABC123)"
   CognitoAppClientId:
     Type: String
     Default: ""
