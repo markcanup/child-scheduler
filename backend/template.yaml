@@ -25,7 +25,7 @@ Parameters:
   AllowedOrigins:
     Type: String
     Default: http://localhost:3000
-    Description: Comma-separated list of browser origins allowed for CORS requests.
+    Description: "Comma-separated list of browser origins allowed for CORS requests."
   CognitoIssuerUrl:
     Type: String
     Default: ""
@@ -33,7 +33,7 @@ Parameters:
   CognitoAppClientId:
     Type: String
     Default: ""
-    Description: Optional Cognito App Client ID (audience) for API Gateway JWT auth.
+    Description: "Optional Cognito App Client ID (audience) for API Gateway JWT auth."
 
 Conditions:
   UseCognitoAuthorizer: !And
@@ -129,8 +129,10 @@ Resources:
             ApiId: !Ref ChildSchedulerApi
             Path: /catalog
             Method: GET
-            Auth:
-              Authorizer: !If [UseCognitoAuthorizer, CognitoJwtAuthorizer, NONE]
+            Auth: !If
+              - UseCognitoAuthorizer
+              - Authorizer: CognitoJwtAuthorizer
+              - !Ref AWS::NoValue
 
   ScheduleConfigGetFunction:
     Type: AWS::Serverless::Function
@@ -148,8 +150,10 @@ Resources:
             ApiId: !Ref ChildSchedulerApi
             Path: /schedule/config
             Method: GET
-            Auth:
-              Authorizer: !If [UseCognitoAuthorizer, CognitoJwtAuthorizer, NONE]
+            Auth: !If
+              - UseCognitoAuthorizer
+              - Authorizer: CognitoJwtAuthorizer
+              - !Ref AWS::NoValue
 
   ScheduleConfigPutFunction:
     Type: AWS::Serverless::Function
@@ -169,10 +173,12 @@ Resources:
             ApiId: !Ref ChildSchedulerApi
             Path: /schedule/config
             Method: PUT
-            Auth:
-              Authorizer: !If [UseCognitoAuthorizer, CognitoJwtAuthorizer, NONE]
+            Auth: !If
+              - UseCognitoAuthorizer
+              - Authorizer: CognitoJwtAuthorizer
+              - !Ref AWS::NoValue
 
 Outputs:
   ApiUrl:
     Description: HTTP API endpoint
-    Value: !Sub https://${ChildSchedulerApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}/
+    Value: !Sub "https://${ChildSchedulerApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"
