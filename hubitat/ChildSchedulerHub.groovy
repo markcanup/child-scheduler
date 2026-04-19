@@ -18,6 +18,7 @@ preferences {
         section("AWS connection") {
             input "awsBaseUrl", "text", title: "AWS Base URL", required: true
             input "hubId", "text", title: "Hub ID", required: true
+            input "hubitatToken", "password", title: "Hubitat shared secret (X-Hubitat-Token)", required: true
         }
 
         section("Rule Machine action discovery") {
@@ -190,7 +191,7 @@ def buildActionDefinitions() {
                     name: "targetId",
                     type: "resourceRef",
                     required: true,
-                    resourceType: "ruleAction"
+                    resourceType: "rule"
                 ]
             ]
         ],
@@ -253,7 +254,7 @@ def buildRuleActionResources() {
         if (matchesRuleFilter(label)) {
             resources << [
                 resourceId: "rule:${ruleId}",
-                resourceType: "ruleAction",
+                type: "rule",
                 label: label,
                 metadata: [
                     ruleId: ruleId.toInteger()
@@ -272,7 +273,7 @@ def buildSpeechTargetResources() {
         allowedSpeechTargets.each { dev ->
             resources << [
                 resourceId: "speechTarget:${dev.id}",
-                resourceType: "speechTarget",
+                type: "speechTarget",
                 label: dev.displayName,
                 metadata: [
                     deviceId: dev.id.toInteger(),
@@ -292,7 +293,7 @@ def buildNotifyDeviceResources() {
         allowedNotifyDevices.each { dev ->
             resources << [
                 resourceId: "notifyDevice:${dev.id}",
-                resourceType: "notifyDevice",
+                type: "notifyDevice",
                 label: dev.displayName,
                 metadata: [
                     deviceId: dev.id.toInteger(),
@@ -379,6 +380,9 @@ def pushActionCatalog() {
             uri: url,
             requestContentType: "application/json",
             contentType: "application/json",
+            headers: [
+                "X-Hubitat-Token": hubitatToken
+            ],
             body: catalog,
             timeout: 15
         ]
@@ -423,6 +427,9 @@ Map pullSchedule() {
         def params = [
             uri: url,
             contentType: "application/json",
+            headers: [
+                "X-Hubitat-Token": hubitatToken
+            ],
             timeout: 15
         ]
 

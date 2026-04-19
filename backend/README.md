@@ -38,3 +38,4 @@ sam deploy --guided
 - Milestone 5: `PUT /schedule/config` implemented with tests
 - Milestone 6: `GET /hubitat/schedule` implemented with tests
 - Milestone 7: API Gateway wiring + environment configuration + deployment docs
+- Milestone 10: documented Hubitat↔AWS end-to-end integration runbook in `hubitat/END_TO_END.md`
