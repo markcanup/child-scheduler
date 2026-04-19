@@ -13,6 +13,24 @@ class FakeTable:
         return {}
 
 
+
+
+def _event_with_claims(hub_id_claim="hub-claims"):
+    return {
+        "headers": {},
+        "requestContext": {
+            "authorizer": {
+                "jwt": {
+                    "claims": {
+                        "sub": "user-1",
+                        "custom:hubId": hub_id_claim,
+                    }
+                }
+            }
+        },
+        "queryStringParameters": {},
+    }
+
 def _event(token="ui-token", hub_id=None):
     event = {
         "headers": {"Authorization": f"Bearer {token}"},
@@ -70,3 +88,25 @@ def test_unauthorized_request(monkeypatch):
     assert response["statusCode"] == 401
     data = json.loads(response["body"])
     assert data["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_catalog_exists_with_cognito_claims(monkeypatch):
+    monkeypatch.setenv("DEFAULT_HUB_ID", "hub-default")
+
+    item = {
+        "hubId": "hub-claims",
+        "generatedAt": "2026-04-18T00:00:00Z",
+        "catalogVersion": "v1",
+        "actionDefinitions": [{"actionType": "rule"}],
+        "resources": [{"resourceId": "rule:1", "type": "rule", "label": "Rule"}],
+    }
+    monkeypatch.setattr(
+        "functions.catalog_get.handler.get_action_catalogs_table",
+        lambda: FakeTable(item=item),
+    )
+
+    response = lambda_handler(_event_with_claims(), None)
+
+    assert response["statusCode"] == 200
+    data = json.loads(response["body"])
+    assert data["hubId"] == "hub-claims"

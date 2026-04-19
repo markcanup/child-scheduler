@@ -61,8 +61,8 @@ def _group_schedule_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
     try:
-        validate_ui_auth(event)
-        hub_id = resolve_ui_hub_id(event)
+        claims = validate_ui_auth(event)
+        hub_id = resolve_ui_hub_id(event, claims)
 
         table = get_schedules_table()
         items = _query_schedule_items(table, hub_id)

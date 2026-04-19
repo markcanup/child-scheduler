@@ -1,9 +1,10 @@
 import { API_BASE_URL } from "../config";
 
-async function request(path, options = {}) {
+async function request(path, options = {}, authToken = "") {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...(options.headers || {}),
     },
     ...options,
@@ -20,17 +21,21 @@ async function request(path, options = {}) {
   return data;
 }
 
-export function getCatalog() {
-  return request("/catalog", { method: "GET" });
+export function getCatalog(authToken) {
+  return request("/catalog", { method: "GET" }, authToken);
 }
 
-export function getScheduleConfig() {
-  return request("/schedule/config", { method: "GET" });
+export function getScheduleConfig(authToken) {
+  return request("/schedule/config", { method: "GET" }, authToken);
 }
 
-export function putScheduleConfig(payload) {
-  return request("/schedule/config", {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
+export function putScheduleConfig(payload, authToken) {
+  return request(
+    "/schedule/config",
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+    authToken,
+  );
 }

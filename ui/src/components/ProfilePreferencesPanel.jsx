@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function getDaysSince(isoDate) {
   if (!isoDate) {
@@ -13,25 +13,80 @@ function getDaysSince(isoDate) {
   return Math.floor((now - rotatedAt) / msPerDay);
 }
 
-export default function ProfilePreferencesPanel() {
+function parseJwtSubject(token) {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) {
+      return "local-user";
+    }
+    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    return decoded.sub || decoded.email || "local-user";
+  } catch {
+    return "local-user";
+  }
+}
+
+function storageKey(token) {
+  return `childScheduler.profile.${parseJwtSubject(token)}`;
+}
+
+export default function ProfilePreferencesPanel({ authToken }) {
   const [psk, setPsk] = useState("");
   const [lastRotated, setLastRotated] = useState("");
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!authToken) {
+      setPsk("");
+      setLastRotated("");
+      setSaved(false);
+      return;
+    }
+
+    const raw = localStorage.getItem(storageKey(authToken));
+    if (!raw) {
+      setPsk("");
+      setLastRotated("");
+      setSaved(false);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      setPsk(parsed.hubitatPsk || "");
+      setLastRotated(parsed.pskLastRotatedAt || "");
+    } catch {
+      setPsk("");
+      setLastRotated("");
+    }
+  }, [authToken]);
 
   const keyAgeDays = useMemo(() => getDaysSince(lastRotated), [lastRotated]);
   const showWarning = keyAgeDays !== null && keyAgeDays >= 365;
 
   function savePreferences() {
-    if (!lastRotated) {
-      setLastRotated(new Date().toISOString());
+    if (!authToken) {
+      return;
     }
+
+    const effectiveLastRotated = lastRotated || new Date().toISOString();
+    setLastRotated(effectiveLastRotated);
+
+    localStorage.setItem(
+      storageKey(authToken),
+      JSON.stringify({
+        hubitatPsk: psk,
+        pskLastRotatedAt: effectiveLastRotated,
+      }),
+    );
     setSaved(true);
   }
 
   return (
     <section className="card">
       <h2>Profile / Preferences</h2>
-      <p>Hubitat PSK preference (temporary local UI state for Milestone 8).</p>
+      <p>Authenticated flow for viewing/updating Hubitat PSK profile field (local storage placeholder).</p>
+      {!authToken && <p className="warning">Sign in to view and edit Hubitat PSK preferences.</p>}
       <label>
         Hubitat PSK
         <input
@@ -42,6 +97,7 @@ export default function ProfilePreferencesPanel() {
             setSaved(false);
           }}
           placeholder="Enter shared secret"
+          disabled={!authToken}
         />
       </label>
       <label>
@@ -54,12 +110,13 @@ export default function ProfilePreferencesPanel() {
             setLastRotated(value ? new Date(value).toISOString() : "");
             setSaved(false);
           }}
+          disabled={!authToken}
         />
       </label>
-      <button type="button" onClick={savePreferences}>
+      <button type="button" onClick={savePreferences} disabled={!authToken}>
         Save preferences
       </button>
-      {saved && <p className="ok">Preferences saved (UI placeholder only).</p>}
+      {saved && <p className="ok">Preferences saved for authenticated user.</p>}
       <p className="muted">
         Last rotated: {lastRotated || "Not set"}
         {keyAgeDays !== null ? ` (${keyAgeDays} days ago)` : ""}

@@ -7,8 +7,8 @@ from shared.responses import error_response, json_response
 
 def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
     try:
-        validate_ui_auth(event)
-        hub_id = resolve_ui_hub_id(event)
+        claims = validate_ui_auth(event)
+        hub_id = resolve_ui_hub_id(event, claims)
 
         table = get_action_catalogs_table()
         result = table.get_item(Key={"hubId": hub_id})

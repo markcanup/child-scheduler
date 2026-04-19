@@ -19,7 +19,7 @@ sam build
 sam deploy --guided
 ```
 
-Recommended guided answers for Milestone 7:
+Recommended guided answers:
 
 - Stack Name: `child-scheduler-backend`
 - AWS Region: your target region
@@ -27,18 +27,25 @@ Recommended guided answers for Milestone 7:
 - Parameter `ActionCatalogsTableName`: DynamoDB table name for catalogs
 - Parameter `SchedulesTableName`: DynamoDB table name for schedule data
 - Parameter `AllowedOrigins`: comma-separated browser origins
-  - Example: `https://app.example.com,http://localhost:3000`
+  - Example: `https://app.example.com,http://localhost:5173`
 - Parameter `HubitatToken`: current Hubitat PSK
+
+Milestone 9 parameters for Cognito JWT browser auth:
+
+- Parameter `CognitoIssuerUrl`: `https://cognito-idp.<region>.amazonaws.com/<userPoolId>`
+- Parameter `CognitoAppClientId`: Cognito app client id
+
+If Cognito params are omitted/empty, browser-route auth falls back to Lambda-level stub bearer token validation (`UI_JWT_STUB_TOKEN`) for local development only.
 
 ## 3) Route mapping
 
 The HTTP API exposes:
 
-- `POST /hubitat/action-catalog`
-- `GET /hubitat/schedule`
-- `GET /catalog`
-- `GET /schedule/config`
-- `PUT /schedule/config`
+- `POST /hubitat/action-catalog` (Hubitat shared-secret auth)
+- `GET /hubitat/schedule` (Hubitat shared-secret auth)
+- `GET /catalog` (browser JWT auth)
+- `GET /schedule/config` (browser JWT auth)
+- `PUT /schedule/config` (browser JWT auth)
 
 ## 4) Environment parameters used by Lambdas
 
@@ -58,9 +65,11 @@ CORS is configured at the API Gateway HTTP API level.
 - Allowed methods: `GET`, `PUT`, `POST`, `OPTIONS`
 - Allowed headers: `Authorization`, `Content-Type`
 
-Hubitat routes do not require CORS behavior because they are not browser calls, but they are still covered by this API-level setting.
+## 6) Cognito docs
 
-## 6) PSK operational policy (v1)
+See `backend/COGNITO_SETUP.md` for detailed setup steps and local-vs-deployed notes.
+
+## 7) PSK operational policy (v1)
 
 The project brief requires managing the Hubitat PSK via AWS-backed UI profile preferences.
 
