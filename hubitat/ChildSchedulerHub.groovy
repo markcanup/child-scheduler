@@ -117,6 +117,7 @@ preferences {
             paragraph "Last catalog push status: ${state.lastCatalogPushStatus ?: 'none'}"
             paragraph "Last catalog push URL: ${state.lastCatalogPushUrl ?: 'none'}"
             paragraph "Last catalog push request bytes: ${state.lastCatalogPushRequestBytes ?: 'none'}"
+            paragraph "Last catalog push request JSON: ${state.lastCatalogPushRequestBody ?: 'none'}"
             paragraph "Last catalog push response body: ${state.lastCatalogPushResponseBody ?: 'none'}"
             paragraph "Last catalog push error: ${state.lastCatalogPushError ?: 'none'}"
             paragraph "Last schedule pull: ${state.lastSchedulePullTime ?: 'none'}"
@@ -375,8 +376,14 @@ def pushActionCatalog() {
     def catalog = buildActionCatalog()
     
     if (useMockCatalogPush) {
+        String mockRequestBodyJson = JsonOutput.toJson(catalog)
         state.lastCatalogPushTime = formatNowIso()
         state.lastCatalogPushStatus = "mock"
+        state.lastCatalogPushUrl = "mock://hubitat/action-catalog"
+        state.lastCatalogPushRequestBytes = mockRequestBodyJson?.getBytes("UTF-8")?.size() ?: 0
+        state.lastCatalogPushRequestBody = JsonOutput.prettyPrint(mockRequestBodyJson)
+        state.lastCatalogPushResponseBody = "mock"
+        state.lastCatalogPushError = null
         log.info "MOCK catalog push payload: ${JsonOutput.prettyPrint(JsonOutput.toJson(catalog))}"
         return
     }
@@ -385,6 +392,8 @@ def pushActionCatalog() {
     String requestBodyJson = JsonOutput.toJson(catalog)
     state.lastCatalogPushUrl = url
     state.lastCatalogPushRequestBytes = requestBodyJson?.getBytes("UTF-8")?.size() ?: 0
+    state.lastCatalogPushRequestBody = JsonOutput.prettyPrint(requestBodyJson)
+    state.lastCatalogPushResponseBody = null
     state.lastCatalogPushError = null
 
     try {
