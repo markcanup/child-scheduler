@@ -404,7 +404,7 @@ def pushActionCatalog() {
             headers: [
                 "X-Hubitat-Token": hubitatToken
             ],
-            body: catalog,
+            body: requestBodyJson,
             timeout: 15
         ]
 
