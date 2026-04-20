@@ -80,10 +80,17 @@ preferences {
             input "useMockCatalogPush", "bool",
                 title: "Use mock catalog push instead of HTTP",
                 required: true,
-                defaultValue: false
+                defaultValue: false,
+                submitOnChange: true
 
             input "useMockSchedulePull", "bool",
                 title: "Use mock schedule pull instead of HTTP",
+                required: true,
+                defaultValue: false,
+                submitOnChange: true
+
+            input "showFullPushRequestJson", "bool",
+                title: "Show full catalog push request JSON in status/logs",
                 required: true,
                 defaultValue: false
         }
@@ -117,7 +124,11 @@ preferences {
             paragraph "Last catalog push status: ${state.lastCatalogPushStatus ?: 'none'}"
             paragraph "Last catalog push URL: ${state.lastCatalogPushUrl ?: 'none'}"
             paragraph "Last catalog push request bytes: ${state.lastCatalogPushRequestBytes ?: 'none'}"
-            paragraph "Last catalog push request JSON: ${state.lastCatalogPushRequestBody ?: 'none'}"
+            if (showFullPushRequestJson) {
+                paragraph "Last catalog push request JSON: ${state.lastCatalogPushRequestBody ?: 'none'}"
+            } else {
+                paragraph "Last catalog push request JSON: hidden (enable \"Show full catalog push request JSON in status/logs\" to view)"
+            }
             paragraph "Last catalog push response body: ${state.lastCatalogPushResponseBody ?: 'none'}"
             paragraph "Last catalog push error: ${state.lastCatalogPushError ?: 'none'}"
             paragraph "Last schedule pull: ${state.lastSchedulePullTime ?: 'none'}"
@@ -129,7 +140,9 @@ preferences {
             paragraph "Last schedule version: ${state.lastScheduleVersion ?: 'none'}"
             paragraph "Pending scheduled events count: ${state.pendingEvents?.size() ?: 0}"
             paragraph "Pending scheduled events: ${state.pendingEvents ?: []}"
-            paragraph "Broken reference notifications sent: ${state.brokenReferenceKeys ?: []}"
+            if ((state.brokenReferenceKeys ?: []).size() > 0) {
+                paragraph "Broken reference notifications sent: ${state.brokenReferenceKeys}"
+            }
         }
     }
 
@@ -384,7 +397,9 @@ def pushActionCatalog() {
         state.lastCatalogPushRequestBody = JsonOutput.prettyPrint(mockRequestBodyJson)
         state.lastCatalogPushResponseBody = "mock"
         state.lastCatalogPushError = null
-        log.info "MOCK catalog push payload: ${JsonOutput.prettyPrint(JsonOutput.toJson(catalog))}"
+        if (showFullPushRequestJson) {
+            log.info "MOCK catalog push payload: ${JsonOutput.prettyPrint(JsonOutput.toJson(catalog))}"
+        }
         return
     }
     
@@ -395,6 +410,9 @@ def pushActionCatalog() {
     state.lastCatalogPushRequestBody = JsonOutput.prettyPrint(requestBodyJson)
     state.lastCatalogPushResponseBody = null
     state.lastCatalogPushError = null
+    if (showFullPushRequestJson) {
+        log.info "Catalog push payload: ${state.lastCatalogPushRequestBody}"
+    }
 
     try {
         def params = [
@@ -736,9 +754,7 @@ def executeNotifyAction(Map event) {
    ========================= */
 
 def initializeBrokenReferenceState() {
-    if (state.brokenReferenceKeys == null) {
-        state.brokenReferenceKeys = []
-    }
+    state.brokenReferenceKeys = []
 }
 
 def handleBrokenOrInvalidEvent(Map event, String message) {
@@ -747,8 +763,6 @@ def handleBrokenOrInvalidEvent(Map event, String message) {
     if (!sendBrokenReferenceNotifications) {
         return
     }
-
-    initializeBrokenReferenceState()
 
     String key = "event:${event?.eventId}:${message}"
     if (!(state.brokenReferenceKeys as List).contains(key)) {
