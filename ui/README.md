@@ -1,4 +1,4 @@
-# UI (Milestones 8-9 bootstrap)
+# UI (Milestones 8-9)
 
 Minimal React + Vite UI scaffold that can call backend APIs and use Cognito-backed JWT auth.
 
@@ -12,6 +12,7 @@ Minimal React + Vite UI scaffold that can call backend APIs and use Cognito-back
 - Schedule config viewer/editor (`GET /schedule/config`, `PUT /schedule/config`)
 - Authenticated profile/preferences flow for Hubitat PSK + last-rotated timestamp (local storage placeholder)
 - Non-blocking warning when PSK age reaches 365+ days
+- Request failure diagnostics panel for network and HTTP errors (URL, method, status, response body when available)
 
 ## Run locally
 

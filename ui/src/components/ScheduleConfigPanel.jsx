@@ -1,4 +1,5 @@
 import { useState } from "react";
+import RequestDiagnostics from "./RequestDiagnostics";
 import { DEFAULT_HUB_ID } from "../config";
 import { getScheduleConfig, putScheduleConfig } from "../services/api";
 
@@ -16,11 +17,13 @@ function defaultPayload() {
 export default function ScheduleConfigPanel({ authToken }) {
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
+  const [diagnostics, setDiagnostics] = useState(null);
   const [jsonText, setJsonText] = useState(JSON.stringify(defaultPayload(), null, 2));
 
   async function loadScheduleConfig() {
     setStatus("loading");
     setMessage("");
+    setDiagnostics(null);
     try {
       const data = await getScheduleConfig(authToken);
       setJsonText(JSON.stringify(data, null, 2));
@@ -28,12 +31,14 @@ export default function ScheduleConfigPanel({ authToken }) {
     } catch (err) {
       setStatus("error");
       setMessage(err.message);
+      setDiagnostics(err.diagnostics || null);
     }
   }
 
   async function saveScheduleConfig() {
     setStatus("saving");
     setMessage("");
+    setDiagnostics(null);
 
     let payload;
     try {
@@ -41,6 +46,12 @@ export default function ScheduleConfigPanel({ authToken }) {
     } catch {
       setStatus("error");
       setMessage("Schedule config JSON is invalid.");
+      setDiagnostics({
+        type: "client_error",
+        error: {
+          message: "Schedule config JSON could not be parsed before sending the request.",
+        },
+      });
       return;
     }
 
@@ -51,6 +62,7 @@ export default function ScheduleConfigPanel({ authToken }) {
     } catch (err) {
       setStatus("error");
       setMessage(err.message);
+      setDiagnostics(err.diagnostics || null);
     }
   }
 
@@ -68,6 +80,7 @@ export default function ScheduleConfigPanel({ authToken }) {
       </div>
       {!authToken && <p className="warning">Sign in first to load or save schedule config.</p>}
       {message && <p className={status === "error" ? "error" : "ok"}>{message}</p>}
+      <RequestDiagnostics diagnostics={diagnostics} />
       <textarea
         aria-label="Schedule config JSON"
         value={jsonText}

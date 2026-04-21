@@ -85,7 +85,7 @@ export default function ProfilePreferencesPanel({ authToken }) {
   return (
     <section className="card">
       <h2>Profile / Preferences</h2>
-      <p>Authenticated flow for viewing/updating Hubitat PSK profile field (local storage placeholder).</p>
+      <p>Authenticated flow for viewing/updating Hubitat PSK profile field (scoped per signed-in user).</p>
       {!authToken && <p className="warning">Sign in to view and edit Hubitat PSK preferences.</p>}
       <label>
         Hubitat PSK

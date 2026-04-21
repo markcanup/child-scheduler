@@ -30,14 +30,33 @@ function buildLogoutUrl() {
   return `${COGNITO_DOMAIN}/logout?${params.toString()}`;
 }
 
+function parseJwt(token) {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) {
+      return null;
+    }
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = atob(normalized);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
 export default function LoginPlaceholder({ authToken, draftToken, onTokenChange, onSaveToken, onSignOut }) {
   const loginUrl = buildLoginUrl();
   const logoutUrl = buildLogoutUrl();
+  const jwtPayload = parseJwt(authToken);
+  const expiresAt =
+    jwtPayload?.exp && Number.isFinite(jwtPayload.exp)
+      ? new Date(jwtPayload.exp * 1000).toISOString()
+      : "";
 
   return (
     <section className="card">
       <h2>Login</h2>
-      <p className="muted">Milestone 9: Cognito auth flow with local-development token fallback.</p>
+      <p className="muted">Cognito auth flow with hosted login and local-development token fallback.</p>
 
       <div className="row wrap">
         <a className={`button-link ${!loginUrl ? "disabled-link" : ""}`} href={loginUrl || undefined}>
@@ -72,6 +91,12 @@ export default function LoginPlaceholder({ authToken, draftToken, onTokenChange,
       </button>
 
       <p className="muted">Auth status: {authToken ? "Authenticated" : "Not authenticated"}</p>
+      {jwtPayload && (
+        <p className="muted">
+          JWT subject: <code>{jwtPayload.sub || jwtPayload.email || "unknown"}</code>
+          {expiresAt ? ` • Expires at: ${expiresAt}` : ""}
+        </p>
+      )}
     </section>
   );
 }
