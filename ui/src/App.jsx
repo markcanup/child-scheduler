@@ -54,7 +54,7 @@ export default function App() {
     <main className="app-shell">
       <header>
         <h1>Child Scheduler</h1>
-        <p className="muted">Milestone 9: Cognito integration bootstrap</p>
+        <p className="muted">Milestone 9: Cognito integration enabled</p>
         <p className="muted">API Base URL: {API_BASE_URL}</p>
       </header>
 

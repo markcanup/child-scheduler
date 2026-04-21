@@ -1,14 +1,17 @@
 import { useState } from "react";
+import RequestDiagnostics from "./RequestDiagnostics";
 import { getCatalog } from "../services/api";
 
 export default function CatalogDebugPanel({ authToken }) {
   const [status, setStatus] = useState("idle");
   const [catalog, setCatalog] = useState(null);
   const [error, setError] = useState("");
+  const [diagnostics, setDiagnostics] = useState(null);
 
   async function loadCatalog() {
     setStatus("loading");
     setError("");
+    setDiagnostics(null);
     try {
       const data = await getCatalog(authToken);
       setCatalog(data);
@@ -16,6 +19,7 @@ export default function CatalogDebugPanel({ authToken }) {
     } catch (err) {
       setStatus("error");
       setError(err.message);
+      setDiagnostics(err.diagnostics || null);
     }
   }
 
@@ -30,6 +34,7 @@ export default function CatalogDebugPanel({ authToken }) {
       </div>
       {!authToken && <p className="warning">Sign in first to call browser API routes.</p>}
       {error && <p className="error">{error}</p>}
+      <RequestDiagnostics diagnostics={diagnostics} />
       <pre>{catalog ? JSON.stringify(catalog, null, 2) : "No catalog loaded yet."}</pre>
     </section>
   );
