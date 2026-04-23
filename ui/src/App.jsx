@@ -14,6 +14,8 @@ const TOKEN_STORAGE_KEY = "childScheduler.uiAuthToken";
 const TOKEN_SESSION_STORAGE_KEY = "childScheduler.uiAuthSession";
 const PKCE_VERIFIER_STORAGE_KEY = "childScheduler.pkceVerifier";
 const EXCHANGED_CODES_STORAGE_KEY = "childScheduler.exchangedOAuthCodes";
+let inFlightCodeExchange = null;
+let inFlightCodeValue = "";
 
 function trimTrailingSlash(url) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
@@ -120,6 +122,18 @@ async function exchangeCodeForTokens(code) {
   return { tokens: { idToken, accessToken }, error: "" };
 }
 
+function exchangeCodeForTokensOnce(code) {
+  if (inFlightCodeExchange && inFlightCodeValue === code) {
+    return inFlightCodeExchange;
+  }
+  inFlightCodeValue = code;
+  inFlightCodeExchange = exchangeCodeForTokens(code).finally(() => {
+    inFlightCodeExchange = null;
+    inFlightCodeValue = "";
+  });
+  return inFlightCodeExchange;
+}
+
 function getBearerToken(session) {
   return session?.accessToken || session?.idToken || "";
 }
@@ -184,7 +198,7 @@ export default function App() {
         const cleanUrl = `${window.location.pathname}`;
         window.history.replaceState({}, document.title, cleanUrl);
 
-        const { tokens, error } = await exchangeCodeForTokens(code);
+        const { tokens, error } = await exchangeCodeForTokensOnce(code);
         if (tokens && mounted) {
           markCodeAsExchanged(code);
           persistSession(tokens, setAuthToken);
