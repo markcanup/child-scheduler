@@ -11,19 +11,25 @@ import ProfilePreferencesPanel from "./components/ProfilePreferencesPanel";
 import ScheduleConfigPanel from "./components/ScheduleConfigPanel";
 
 const TOKEN_STORAGE_KEY = "childScheduler.uiAuthToken";
+const TOKEN_SESSION_STORAGE_KEY = "childScheduler.uiAuthSession";
 const PKCE_VERIFIER_STORAGE_KEY = "childScheduler.pkceVerifier";
 
 function trimTrailingSlash(url) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
-function tokenFromHash() {
+function tokensFromHash() {
   const hash = window.location.hash || "";
   if (!hash.startsWith("#")) {
-    return "";
+    return null;
   }
   const params = new URLSearchParams(hash.slice(1));
-  return params.get("id_token") || params.get("access_token") || "";
+  const idToken = params.get("id_token") || "";
+  const accessToken = params.get("access_token") || "";
+  if (!idToken && !accessToken) {
+    return null;
+  }
+  return { idToken, accessToken };
 }
 
 function parseCodeFromSearch() {
@@ -54,11 +60,11 @@ async function sha256Base64Url(input) {
 
 async function exchangeCodeForTokens(code) {
   if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
-    return "";
+    return { tokens: null, error: "Missing Cognito domain/client configuration." };
   }
   const verifier = localStorage.getItem(PKCE_VERIFIER_STORAGE_KEY) || "";
   if (!verifier) {
-    return "";
+    return { tokens: null, error: "Missing PKCE code_verifier in browser storage." };
   }
 
   const body = new URLSearchParams({
@@ -75,10 +81,43 @@ async function exchangeCodeForTokens(code) {
     body,
   });
   if (!response.ok) {
-    return "";
+    const responseBody = await response.text();
+    return {
+      tokens: null,
+      error: `Token endpoint rejected the code (${response.status}). ${responseBody || "No response body."}`,
+    };
   }
   const payload = await response.json();
-  return payload.id_token || payload.access_token || "";
+  const idToken = payload.id_token || "";
+  const accessToken = payload.access_token || "";
+  if (!idToken && !accessToken) {
+    return { tokens: null, error: "Token endpoint response did not include id_token or access_token." };
+  }
+  return { tokens: { idToken, accessToken }, error: "" };
+}
+
+function getBearerToken(session) {
+  return session?.accessToken || session?.idToken || "";
+}
+
+function persistSession(session, setAuthToken) {
+  localStorage.setItem(TOKEN_SESSION_STORAGE_KEY, JSON.stringify(session));
+  const bearerToken = getBearerToken(session);
+  localStorage.setItem(TOKEN_STORAGE_KEY, bearerToken);
+  setAuthToken(bearerToken);
+}
+
+function loadInitialBearerToken() {
+  const sessionRaw = localStorage.getItem(TOKEN_SESSION_STORAGE_KEY) || "";
+  if (sessionRaw) {
+    try {
+      const parsed = JSON.parse(sessionRaw);
+      return getBearerToken(parsed);
+    } catch {
+      return localStorage.getItem(TOKEN_STORAGE_KEY) || "";
+    }
+  }
+  return localStorage.getItem(TOKEN_STORAGE_KEY) || "";
 }
 
 async function buildHostedLoginUrl() {
@@ -100,7 +139,7 @@ async function buildHostedLoginUrl() {
 }
 
 export default function App() {
-  const [authToken, setAuthToken] = useState(localStorage.getItem(TOKEN_STORAGE_KEY) || "");
+  const [authToken, setAuthToken] = useState(loadInitialBearerToken());
   const [draftToken, setDraftToken] = useState("");
   const [loginUrl, setLoginUrl] = useState("");
   const [authHint, setAuthHint] = useState("");
@@ -109,20 +148,12 @@ export default function App() {
     let mounted = true;
 
     async function initializeAuth() {
-      if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
-        const generatedLoginUrl = await buildHostedLoginUrl();
-        if (mounted) {
-          setLoginUrl(generatedLoginUrl);
-        }
-      }
-
       const code = parseCodeFromSearch();
       if (code) {
-        const codeToken = await exchangeCodeForTokens(code);
-        if (codeToken && mounted) {
-          localStorage.setItem(TOKEN_STORAGE_KEY, codeToken);
+        const { tokens, error } = await exchangeCodeForTokens(code);
+        if (tokens && mounted) {
+          persistSession(tokens, setAuthToken);
           localStorage.removeItem(PKCE_VERIFIER_STORAGE_KEY);
-          setAuthToken(codeToken);
           setDraftToken("");
           const nextUrl = `${window.location.pathname}`;
           window.history.replaceState({}, document.title, nextUrl);
@@ -130,18 +161,24 @@ export default function App() {
         }
         if (mounted) {
           setAuthHint(
-            "Found OAuth code in URL but token exchange failed. Please sign in again from this browser tab, or paste a JWT access/id token (not the code value).",
+            `Found OAuth code in URL but token exchange failed. ${error || ""} Please sign in again from this browser tab, or paste a JWT access/id token (not the code value).`,
           );
         }
       }
 
-      const hashToken = tokenFromHash();
-      if (!hashToken || !mounted) {
+      if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
+        const generatedLoginUrl = await buildHostedLoginUrl();
+        if (mounted) {
+          setLoginUrl(generatedLoginUrl);
+        }
+      }
+
+      const hashTokens = tokensFromHash();
+      if (!hashTokens || !mounted) {
         return;
       }
 
-      localStorage.setItem(TOKEN_STORAGE_KEY, hashToken);
-      setAuthToken(hashToken);
+      persistSession(hashTokens, setAuthToken);
       setDraftToken("");
 
       const nextUrl = `${window.location.pathname}${window.location.search}`;
@@ -161,18 +198,16 @@ export default function App() {
     }
     setAuthHint("");
     if (isJwtLike(candidate)) {
-      localStorage.setItem(TOKEN_STORAGE_KEY, candidate);
-      setAuthToken(candidate);
+      persistSession({ accessToken: candidate, idToken: "" }, setAuthToken);
       setDraftToken("");
       return;
     }
 
     if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
       exchangeCodeForTokens(candidate)
-        .then((token) => {
-          if (token) {
-            localStorage.setItem(TOKEN_STORAGE_KEY, token);
-            setAuthToken(token);
+        .then(({ tokens }) => {
+          if (tokens && getBearerToken(tokens)) {
+            persistSession(tokens, setAuthToken);
             setDraftToken("");
             return;
           }
@@ -195,6 +230,8 @@ export default function App() {
 
   function signOut() {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_SESSION_STORAGE_KEY);
+    localStorage.removeItem(PKCE_VERIFIER_STORAGE_KEY);
     setAuthToken("");
     setDraftToken("");
   }
