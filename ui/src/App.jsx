@@ -31,6 +31,10 @@ function parseCodeFromSearch() {
   return params.get("code") || "";
 }
 
+function isJwtLike(value) {
+  return value.split(".").length === 3;
+}
+
 function randomBase64Url(bytes = 32) {
   const randomBytes = crypto.getRandomValues(new Uint8Array(bytes));
   return btoa(String.fromCharCode(...randomBytes))
@@ -99,6 +103,7 @@ export default function App() {
   const [authToken, setAuthToken] = useState(localStorage.getItem(TOKEN_STORAGE_KEY) || "");
   const [draftToken, setDraftToken] = useState("");
   const [loginUrl, setLoginUrl] = useState("");
+  const [authHint, setAuthHint] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -123,6 +128,11 @@ export default function App() {
           window.history.replaceState({}, document.title, nextUrl);
           return;
         }
+        if (mounted) {
+          setAuthHint(
+            "Found OAuth code in URL but token exchange failed. Please sign in again from this browser tab, or paste a JWT access/id token (not the code value).",
+          );
+        }
       }
 
       const hashToken = tokenFromHash();
@@ -145,13 +155,42 @@ export default function App() {
   }, []);
 
   function saveDraftToken() {
-    const token = draftToken.trim();
-    if (!token) {
+    const candidate = draftToken.trim();
+    if (!candidate) {
       return;
     }
-    localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    setAuthToken(token);
-    setDraftToken("");
+    setAuthHint("");
+    if (isJwtLike(candidate)) {
+      localStorage.setItem(TOKEN_STORAGE_KEY, candidate);
+      setAuthToken(candidate);
+      setDraftToken("");
+      return;
+    }
+
+    if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
+      exchangeCodeForTokens(candidate)
+        .then((token) => {
+          if (token) {
+            localStorage.setItem(TOKEN_STORAGE_KEY, token);
+            setAuthToken(token);
+            setDraftToken("");
+            return;
+          }
+          setAuthHint(
+            "The pasted value is not a JWT and could not be exchanged as an OAuth code. Paste the JWT access/id token from Cognito login response.",
+          );
+        })
+        .catch(() => {
+          setAuthHint(
+            "Token exchange failed for pasted value. Paste a JWT access/id token, or complete hosted sign-in in this same browser tab.",
+          );
+        });
+      return;
+    }
+
+    setAuthHint(
+      "The pasted value does not look like a JWT bearer token. Paste an access/id token (three dot-separated segments), not the authorization code.",
+    );
   }
 
   function signOut() {
@@ -175,6 +214,7 @@ export default function App() {
         onTokenChange={setDraftToken}
         onSaveToken={saveDraftToken}
         onSignOut={signOut}
+        authHint={authHint}
       />
       <CatalogDebugPanel authToken={authToken} />
       <ScheduleConfigPanel authToken={authToken} />
