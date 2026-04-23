@@ -13,6 +13,7 @@ import ScheduleConfigPanel from "./components/ScheduleConfigPanel";
 const TOKEN_STORAGE_KEY = "childScheduler.uiAuthToken";
 const TOKEN_SESSION_STORAGE_KEY = "childScheduler.uiAuthSession";
 const PKCE_VERIFIER_STORAGE_KEY = "childScheduler.pkceVerifier";
+const EXCHANGED_CODES_STORAGE_KEY = "childScheduler.exchangedOAuthCodes";
 
 function trimTrailingSlash(url) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
@@ -35,6 +36,29 @@ function tokensFromHash() {
 function parseCodeFromSearch() {
   const params = new URLSearchParams(window.location.search);
   return params.get("code") || "";
+}
+
+function loadExchangedCodes() {
+  try {
+    const raw = sessionStorage.getItem(EXCHANGED_CODES_STORAGE_KEY) || "[]";
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function hasExchangedCode(code) {
+  return loadExchangedCodes().includes(code);
+}
+
+function markCodeAsExchanged(code) {
+  const current = loadExchangedCodes();
+  if (current.includes(code)) {
+    return;
+  }
+  const next = [...current, code].slice(-10);
+  sessionStorage.setItem(EXCHANGED_CODES_STORAGE_KEY, JSON.stringify(next));
 }
 
 function isJwtLike(value) {
@@ -150,13 +174,22 @@ export default function App() {
     async function initializeAuth() {
       const code = parseCodeFromSearch();
       if (code) {
+        if (mounted && hasExchangedCode(code)) {
+          setAuthHint(
+            "This OAuth code was already used from this tab/session. Please sign in again to get a fresh code.",
+          );
+          return;
+        }
+
+        const cleanUrl = `${window.location.pathname}`;
+        window.history.replaceState({}, document.title, cleanUrl);
+
         const { tokens, error } = await exchangeCodeForTokens(code);
         if (tokens && mounted) {
+          markCodeAsExchanged(code);
           persistSession(tokens, setAuthToken);
           localStorage.removeItem(PKCE_VERIFIER_STORAGE_KEY);
           setDraftToken("");
-          const nextUrl = `${window.location.pathname}`;
-          window.history.replaceState({}, document.title, nextUrl);
           return;
         }
         if (mounted) {
