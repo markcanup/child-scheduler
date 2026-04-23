@@ -40,6 +40,7 @@ export default function LoginPlaceholder({
   authToken,
   draftToken,
   loginUrl,
+  authHint,
   onTokenChange,
   onSaveToken,
   onSignOut,
@@ -78,18 +79,19 @@ export default function LoginPlaceholder({
       )}
 
       <label>
-        Access token / ID token (local dev fallback)
+        Access token / ID token (JWT, local dev fallback)
         <textarea
           aria-label="JWT token"
           value={draftToken}
           onChange={(event) => onTokenChange(event.target.value)}
           rows={3}
-          placeholder="Paste bearer token for local testing"
+          placeholder="Paste JWT bearer token (not the OAuth code)"
         />
       </label>
       <button type="button" onClick={onSaveToken}>
         Use pasted token
       </button>
+      {authHint && <p className="warning">{authHint}</p>}
 
       <p className="muted">Auth status: {authToken ? "Authenticated" : "Not authenticated"}</p>
       {jwtPayload && (
