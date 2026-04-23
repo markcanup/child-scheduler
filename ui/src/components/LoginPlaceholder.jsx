@@ -2,21 +2,13 @@ import {
   COGNITO_CLIENT_ID,
   COGNITO_DOMAIN,
   COGNITO_LOGOUT_URI,
-  COGNITO_REDIRECT_URI,
 } from "../config";
 
-function buildLoginUrl() {
-  if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
+function toAbsoluteDomainUrl(domain) {
+  if (!domain) {
     return "";
   }
-
-  const params = new URLSearchParams({
-    client_id: COGNITO_CLIENT_ID,
-    response_type: "token",
-    scope: "openid email profile",
-    redirect_uri: COGNITO_REDIRECT_URI,
-  });
-  return `${COGNITO_DOMAIN}/login?${params.toString()}`;
+  return domain.endsWith("/") ? domain.slice(0, -1) : domain;
 }
 
 function buildLogoutUrl() {
@@ -27,7 +19,7 @@ function buildLogoutUrl() {
     client_id: COGNITO_CLIENT_ID,
     logout_uri: COGNITO_LOGOUT_URI,
   });
-  return `${COGNITO_DOMAIN}/logout?${params.toString()}`;
+  return `${toAbsoluteDomainUrl(COGNITO_DOMAIN)}/logout?${params.toString()}`;
 }
 
 function parseJwt(token) {
@@ -44,8 +36,14 @@ function parseJwt(token) {
   }
 }
 
-export default function LoginPlaceholder({ authToken, draftToken, onTokenChange, onSaveToken, onSignOut }) {
-  const loginUrl = buildLoginUrl();
+export default function LoginPlaceholder({
+  authToken,
+  draftToken,
+  loginUrl,
+  onTokenChange,
+  onSaveToken,
+  onSignOut,
+}) {
   const logoutUrl = buildLogoutUrl();
   const jwtPayload = parseJwt(authToken);
   const expiresAt =
@@ -59,7 +57,10 @@ export default function LoginPlaceholder({ authToken, draftToken, onTokenChange,
       <p className="muted">Cognito auth flow with hosted login and local-development token fallback.</p>
 
       <div className="row wrap">
-        <a className={`button-link ${!loginUrl ? "disabled-link" : ""}`} href={loginUrl || undefined}>
+        <a
+          className={`button-link ${!loginUrl ? "disabled-link" : ""}`}
+          href={loginUrl || undefined}
+        >
           Sign in with Cognito Hosted UI
         </a>
         <button type="button" onClick={onSignOut} disabled={!authToken}>
