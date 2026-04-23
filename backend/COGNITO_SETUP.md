@@ -19,6 +19,8 @@ In AWS Cognito:
 2. Create an App Client for the web UI.
 3. Configure a Hosted UI domain.
 4. Add allowed callback and sign-out URLs (for example your deployed UI URL and local `http://localhost:5173`).
+5. In the app client OAuth settings, enable **Authorization code grant**.
+6. Ensure scopes include at least `openid`, `email`, and `profile`.
 
 ## 2) Capture deploy-time values
 
@@ -54,6 +56,22 @@ For deployed frontend:
 - `VITE_COGNITO_CLIENT_ID=<app client id>`
 - `VITE_COGNITO_REDIRECT_URI=<frontend URL>`
 - `VITE_COGNITO_LOGOUT_URI=<frontend URL>`
+
+Frontend hosted-login behavior:
+
+- Starts auth at:
+  `https://<your-domain>.auth.<region>.amazoncognito.com/oauth2/authorize`
+- Uses query parameters:
+  - `response_type=code`
+  - `client_id=<app client id>`
+  - `redirect_uri=<VITE_COGNITO_REDIRECT_URI>`
+  - `scope=openid email profile`
+  - `code_challenge_method=S256` and `code_challenge=<pkce challenge>`
+- Exchanges `code` at:
+  `https://<your-domain>.auth.<region>.amazoncognito.com/oauth2/token`
+  with PKCE `code_verifier`.
+
+If your app client only allows Authorization Code grant, this must use `response_type=code` (not `token`).
 
 For local frontend with deployed Cognito:
 
