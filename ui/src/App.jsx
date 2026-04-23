@@ -60,11 +60,11 @@ async function sha256Base64Url(input) {
 
 async function exchangeCodeForTokens(code) {
   if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
-    return null;
+    return { tokens: null, error: "Missing Cognito domain/client configuration." };
   }
   const verifier = localStorage.getItem(PKCE_VERIFIER_STORAGE_KEY) || "";
   if (!verifier) {
-    return null;
+    return { tokens: null, error: "Missing PKCE code_verifier in browser storage." };
   }
 
   const body = new URLSearchParams({
@@ -81,15 +81,19 @@ async function exchangeCodeForTokens(code) {
     body,
   });
   if (!response.ok) {
-    return null;
+    const responseBody = await response.text();
+    return {
+      tokens: null,
+      error: `Token endpoint rejected the code (${response.status}). ${responseBody || "No response body."}`,
+    };
   }
   const payload = await response.json();
   const idToken = payload.id_token || "";
   const accessToken = payload.access_token || "";
   if (!idToken && !accessToken) {
-    return null;
+    return { tokens: null, error: "Token endpoint response did not include id_token or access_token." };
   }
-  return { idToken, accessToken };
+  return { tokens: { idToken, accessToken }, error: "" };
 }
 
 function getBearerToken(session) {
@@ -144,18 +148,11 @@ export default function App() {
     let mounted = true;
 
     async function initializeAuth() {
-      if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
-        const generatedLoginUrl = await buildHostedLoginUrl();
-        if (mounted) {
-          setLoginUrl(generatedLoginUrl);
-        }
-      }
-
       const code = parseCodeFromSearch();
       if (code) {
-        const tokenSession = await exchangeCodeForTokens(code);
-        if (tokenSession && mounted) {
-          persistSession(tokenSession, setAuthToken);
+        const { tokens, error } = await exchangeCodeForTokens(code);
+        if (tokens && mounted) {
+          persistSession(tokens, setAuthToken);
           localStorage.removeItem(PKCE_VERIFIER_STORAGE_KEY);
           setDraftToken("");
           const nextUrl = `${window.location.pathname}`;
@@ -164,8 +161,15 @@ export default function App() {
         }
         if (mounted) {
           setAuthHint(
-            "Found OAuth code in URL but token exchange failed. Please sign in again from this browser tab, or paste a JWT access/id token (not the code value).",
+            `Found OAuth code in URL but token exchange failed. ${error || ""} Please sign in again from this browser tab, or paste a JWT access/id token (not the code value).`,
           );
+        }
+      }
+
+      if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
+        const generatedLoginUrl = await buildHostedLoginUrl();
+        if (mounted) {
+          setLoginUrl(generatedLoginUrl);
         }
       }
 
@@ -201,9 +205,9 @@ export default function App() {
 
     if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
       exchangeCodeForTokens(candidate)
-        .then((token) => {
-          if (token && getBearerToken(token)) {
-            persistSession(token, setAuthToken);
+        .then(({ tokens }) => {
+          if (tokens && getBearerToken(tokens)) {
+            persistSession(tokens, setAuthToken);
             setDraftToken("");
             return;
           }
