@@ -195,15 +195,14 @@ export default function App() {
           return;
         }
 
-        const cleanUrl = `${window.location.pathname}`;
-        window.history.replaceState({}, document.title, cleanUrl);
-
         const { tokens, error } = await exchangeCodeForTokensOnce(code);
         if (tokens && mounted) {
           markCodeAsExchanged(code);
           persistSession(tokens, setAuthToken);
           localStorage.removeItem(PKCE_VERIFIER_STORAGE_KEY);
           setDraftToken("");
+          const cleanUrl = `${window.location.pathname}`;
+          window.history.replaceState({}, document.title, cleanUrl);
           return;
         }
         if (mounted) {
