@@ -66,6 +66,7 @@ jobs:
                                   UiJwtStubToken="${{ secrets.UI_JWT_STUB_TOKEN }}" \
                                   DefaultHubId="${{ vars.DEFAULT_HUB_ID }}" \
                                   HubitatToken="${{ secrets.HUBITAT_TOKEN }}" \
+                                  HubitatTokenLastRotate="${{ vars.HUBITAT_TOKEN_LAST_ROTATED }}" \
             --capabilities "$CAPABILITIES" \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset
