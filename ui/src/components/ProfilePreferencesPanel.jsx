@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { getScheduleConfig } from "../services/api";
 
 function getDaysSince(isoDate) {
   if (!isoDate) {
@@ -13,110 +14,61 @@ function getDaysSince(isoDate) {
   return Math.floor((now - rotatedAt) / msPerDay);
 }
 
-function parseJwtSubject(token) {
-  try {
-    const payload = token.split(".")[1];
-    if (!payload) {
-      return "local-user";
-    }
-    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-    return decoded.sub || decoded.email || "local-user";
-  } catch {
-    return "local-user";
-  }
-}
-
-function storageKey(token) {
-  return `childScheduler.profile.${parseJwtSubject(token)}`;
-}
-
 export default function ProfilePreferencesPanel({ authToken }) {
-  const [psk, setPsk] = useState("");
+  const [status, setStatus] = useState("idle");
   const [lastRotated, setLastRotated] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (!authToken) {
-      setPsk("");
-      setLastRotated("");
-      setSaved(false);
-      return;
+    let mounted = true;
+
+    async function loadTokenRotation() {
+      if (!authToken) {
+        setStatus("idle");
+        setLastRotated("");
+        setMessage("");
+        return;
+      }
+
+      setStatus("loading");
+      setMessage("");
+      try {
+        const config = await getScheduleConfig(authToken);
+        if (!mounted) {
+          return;
+        }
+        const rotatedAt = config?.security?.hubitatTokenLastRotatedAt || "";
+        setLastRotated(rotatedAt);
+        setStatus("success");
+      } catch {
+        if (!mounted) {
+          return;
+        }
+        setLastRotated("");
+        setStatus("error");
+        setMessage("Could not load Hubitat token rotation metadata from backend.");
+      }
     }
 
-    const raw = localStorage.getItem(storageKey(authToken));
-    if (!raw) {
-      setPsk("");
-      setLastRotated("");
-      setSaved(false);
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw);
-      setPsk(parsed.hubitatPsk || "");
-      setLastRotated(parsed.pskLastRotatedAt || "");
-    } catch {
-      setPsk("");
-      setLastRotated("");
-    }
+    loadTokenRotation();
+    return () => {
+      mounted = false;
+    };
   }, [authToken]);
 
   const keyAgeDays = useMemo(() => getDaysSince(lastRotated), [lastRotated]);
   const showWarning = keyAgeDays !== null && keyAgeDays >= 365;
 
-  function savePreferences() {
-    if (!authToken) {
-      return;
-    }
-
-    const effectiveLastRotated = lastRotated || new Date().toISOString();
-    setLastRotated(effectiveLastRotated);
-
-    localStorage.setItem(
-      storageKey(authToken),
-      JSON.stringify({
-        hubitatPsk: psk,
-        pskLastRotatedAt: effectiveLastRotated,
-      }),
-    );
-    setSaved(true);
-  }
-
   return (
     <section className="card">
       <h2>Profile / Preferences</h2>
-      <p>Authenticated flow for viewing/updating Hubitat PSK profile field (scoped per signed-in user).</p>
-      {!authToken && <p className="warning">Sign in to view and edit Hubitat PSK preferences.</p>}
-      <label>
-        Hubitat PSK
-        <input
-          type="password"
-          value={psk}
-          onChange={(event) => {
-            setPsk(event.target.value);
-            setSaved(false);
-          }}
-          placeholder="Enter shared secret"
-          disabled={!authToken}
-        />
-      </label>
-      <label>
-        PSK last rotated timestamp
-        <input
-          type="datetime-local"
-          value={lastRotated ? lastRotated.slice(0, 16) : ""}
-          onChange={(event) => {
-            const value = event.target.value;
-            setLastRotated(value ? new Date(value).toISOString() : "");
-            setSaved(false);
-          }}
-          disabled={!authToken}
-        />
-      </label>
-      <button type="button" onClick={savePreferences} disabled={!authToken}>
-        Save preferences
-      </button>
-      {saved && <p className="ok">Preferences saved for authenticated user.</p>}
+      <p>
+        Hubitat shared secret rotation is managed in AWS deployment configuration. The UI no longer allows viewing
+        or editing the token value.
+      </p>
+      {!authToken && <p className="warning">Sign in to view Hubitat token rotation status.</p>}
+      {status === "loading" && <p className="muted">Loading token rotation status...</p>}
+      {status === "error" && <p className="warning">{message}</p>}
       <p className="muted">
         Last rotated: {lastRotated || "Not set"}
         {keyAgeDays !== null ? ` (${keyAgeDays} days ago)` : ""}

@@ -1,4 +1,6 @@
-from typing import Any, Dict, List
+import os
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from shared.auth import AuthError, resolve_ui_hub_id, validate_ui_auth
 from shared.dynamodb import get_schedules_table
@@ -59,6 +61,32 @@ def _group_schedule_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _normalize_rotation_timestamp(raw_value: str) -> Optional[str]:
+    raw = (raw_value or "").strip()
+    if not raw:
+        return None
+
+    # Preferred operational format from deployment metadata:
+    # YYYY-MM-DD.HH:MM:SS (treated as UTC).
+    try:
+        parsed = datetime.strptime(raw, "%Y-%m-%d.%H:%M:%S").replace(tzinfo=timezone.utc)
+        return parsed.isoformat().replace("+00:00", "Z")
+    except ValueError:
+        pass
+
+    # Also allow ISO-8601 if already provided.
+    try:
+        normalized_iso = raw.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized_iso)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        else:
+            parsed = parsed.astimezone(timezone.utc)
+        return parsed.isoformat().replace("+00:00", "Z")
+    except ValueError:
+        return None
+
+
 def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
     try:
         claims = validate_ui_auth(event)
@@ -73,6 +101,11 @@ def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
             {
                 "hubId": hub_id,
                 **grouped,
+                "security": {
+                    "hubitatTokenLastRotatedAt": _normalize_rotation_timestamp(
+                        os.environ.get("HUBITAT_TOKEN_LAST_ROTATED", "")
+                    )
+                },
             },
             event=event,
         )

@@ -312,9 +312,9 @@ PUT /schedule/config
 - UI: Cognito JWT
 
 Hubitat token operational policy (v1):
-- PSK is managed via a UI preference/profile field and stored by AWS backend
-- Saving PSK via UI also updates PSK last-rotated timestamp
-- PSK timestamp is visible in UI
+- PSK is managed via AWS deployment configuration (`HUBITAT_TOKEN`), not editable in UI
+- Last-rotated timestamp is managed via `HUBITAT_TOKEN_LAST_ROTATED`
+- PSK timestamp is visible in UI as read-only metadata
 - Rotate annually
 - UI should show a warning when key age reaches 365 days; do not hard-stop solely due to age
 

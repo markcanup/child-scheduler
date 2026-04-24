@@ -32,6 +32,7 @@ def _event(token="ui-token", hub_id=None, with_claims=True):
 def test_empty_hub_state(monkeypatch):
     monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
     monkeypatch.setenv("DEFAULT_HUB_ID", "hub-1")
+    monkeypatch.setenv("HUBITAT_TOKEN_LAST_ROTATED", "2026-04-23.18:20:12")
     monkeypatch.setattr(
         "functions.schedule_config_get.handler.get_schedules_table",
         lambda: FakeTable(items=[]),
@@ -51,11 +52,13 @@ def test_empty_hub_state(monkeypatch):
     assert data["dayConfigs"] == []
     assert data["compiledPreview"] == []
     assert data["brokenReferences"] == []
+    assert data["security"]["hubitatTokenLastRotatedAt"] == "2026-04-23T18:20:12Z"
 
 
 def test_populated_hub_state(monkeypatch):
     monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
     monkeypatch.setenv("DEFAULT_HUB_ID", "hub-1")
+    monkeypatch.setenv("HUBITAT_TOKEN_LAST_ROTATED", "2026-04-23.18:20:12")
 
     items = [
         {
@@ -97,6 +100,27 @@ def test_populated_hub_state(monkeypatch):
     assert len(data["dayConfigs"]) == 1
     assert len(data["compiledPreview"]) == 1
     assert len(data["brokenReferences"]) == 1
+    assert data["security"]["hubitatTokenLastRotatedAt"] == "2026-04-23T18:20:12Z"
+
+
+def test_invalid_rotation_timestamp_returns_null(monkeypatch):
+    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
+    monkeypatch.setenv("DEFAULT_HUB_ID", "hub-1")
+    monkeypatch.setenv("HUBITAT_TOKEN_LAST_ROTATED", "not-a-date")
+    monkeypatch.setattr(
+        "functions.schedule_config_get.handler.get_schedules_table",
+        lambda: FakeTable(items=[]),
+    )
+    monkeypatch.setattr(
+        "functions.schedule_config_get.handler._query_schedule_items",
+        lambda table, hub_id: [],
+    )
+
+    response = lambda_handler(_event(), None)
+
+    assert response["statusCode"] == 200
+    data = json.loads(response["body"])
+    assert data["security"]["hubitatTokenLastRotatedAt"] is None
 
 
 def test_unauthorized_request(monkeypatch):
