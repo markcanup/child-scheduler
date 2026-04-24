@@ -177,6 +177,7 @@ async function buildHostedLoginUrl() {
 }
 
 export default function App() {
+  const isCognitoConfigured = Boolean(COGNITO_DOMAIN && COGNITO_CLIENT_ID);
   const [authToken, setAuthToken] = useState(loadInitialBearerToken());
   const [draftToken, setDraftToken] = useState("");
   const [loginUrl, setLoginUrl] = useState("");
@@ -212,10 +213,16 @@ export default function App() {
         }
       }
 
-      if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
-        const generatedLoginUrl = await buildHostedLoginUrl();
-        if (mounted) {
-          setLoginUrl(generatedLoginUrl);
+      if (isCognitoConfigured) {
+        try {
+          const generatedLoginUrl = await buildHostedLoginUrl();
+          if (mounted) {
+            setLoginUrl(generatedLoginUrl);
+          }
+        } catch {
+          if (mounted) {
+            setAuthHint("Unable to build Cognito login URL in this browser context.");
+          }
         }
       }
 
@@ -235,7 +242,7 @@ export default function App() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [isCognitoConfigured]);
 
   function saveDraftToken() {
     const candidate = draftToken.trim();
@@ -294,6 +301,7 @@ export default function App() {
         authToken={authToken}
         draftToken={draftToken}
         loginUrl={loginUrl}
+        isCognitoConfigured={isCognitoConfigured}
         onTokenChange={setDraftToken}
         onSaveToken={saveDraftToken}
         onSignOut={signOut}
