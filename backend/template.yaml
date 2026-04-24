@@ -54,15 +54,20 @@ Resources:
     Properties:
       StageName: !Ref StageName
       CorsConfiguration:
-        AllowOrigins: !Split [",", !Ref AllowedOrigins]
+#        AllowOrigins: !Split [",", !Ref AllowedOrigins]
+        AllowOrigins:
+          - "https://ubuntu24.lan:5179"
+          - "http://localhost:5174"
         AllowHeaders:
           - Authorization
           - Content-Type
+          - X-Hubitat-Token
         AllowMethods:
           - GET
           - PUT
           - POST
           - OPTIONS
+        MaxAge: 600
 
   HubitatActionCatalogPostFunction:
     Type: AWS::Serverless::Function
