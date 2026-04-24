@@ -60,7 +60,9 @@ jobs:
             --stack-name "$STACK_NAME" \
             --region "$AWS_REGION" \
             --s3-bucket "$S3_BUCKET" \
-            --parameter-overrides AllowedOrigins="https://ubuntu24.lan:5179" \
+            --parameter-overrides AllowedOrigins="${{ vars.ALLOWED_ORIGINS }}" \
+                                  CognitoIssuerUrl="${{ vars.COGNITO_ISSUER_URL }}" \
+                                  CognitoAppClientId="${{ vars.COGNITO_APP_CLIENT_ID }}" \
             --capabilities "$CAPABILITIES" \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset
