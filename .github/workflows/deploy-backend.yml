@@ -60,6 +60,7 @@ jobs:
             --stack-name "$STACK_NAME" \
             --region "$AWS_REGION" \
             --s3-bucket "$S3_BUCKET" \
+            --parameter-overrides AllowedOrigins="https://ubuntu24.lan:5179" \
             --capabilities "$CAPABILITIES" \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset
