@@ -2,7 +2,7 @@ from typing import Any, Dict, List
 
 from shared.auth import AuthError, resolve_ui_hub_id, validate_ui_auth
 from shared.dynamodb import get_schedules_table
-from shared.responses import error_response, json_response
+from shared.responses import cors_debug_info, error_response, json_response
 
 
 def _query_schedule_items(table: Any, hub_id: str) -> List[Dict[str, Any]]:
@@ -74,8 +74,18 @@ def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
                 "hubId": hub_id,
                 **grouped,
             },
+            event=event,
         )
     except AuthError as exc:
-        return error_response(401, "UNAUTHORIZED", str(exc))
+        return error_response(
+            401,
+            "UNAUTHORIZED",
+            str(exc),
+            event=event,
+            details={
+                "authMode": "cognito-jwt",
+                "cors": cors_debug_info(event),
+            },
+        )
     except Exception:
-        return error_response(500, "INTERNAL_ERROR", "Unexpected server error")
+        return error_response(500, "INTERNAL_ERROR", "Unexpected server error", event=event)

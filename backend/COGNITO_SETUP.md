@@ -45,7 +45,7 @@ Set these SAM parameters:
 - `CognitoIssuerUrl=<issuer URL>`
 - `CognitoAppClientId=<app client id>`
 
-If either is empty, API Gateway Cognito JWT authorizer is disabled and route auth falls back to Lambda stub-token validation (`UI_JWT_STUB_TOKEN`) for local development.
+If either is empty, direct bearer-token validation in Lambda will fail with `401 UNAUTHORIZED` because browser routes now require Cognito JWT settings.
 
 ## 4) Configure frontend env
 
@@ -80,6 +80,6 @@ For local frontend with deployed Cognito:
 
 For fully local backend testing:
 
-- Leave Cognito SAM parameters empty.
-- Keep `UI_JWT_STUB_TOKEN` configured.
-- Paste the stub token in the UI login panel.
+- Keep `CognitoIssuerUrl` and `CognitoAppClientId` configured to your Cognito pool/app client.
+- Sign in through Cognito Hosted UI and send the returned JWT bearer token.
+- Hubitat routes are unchanged and still authenticate with `X-Hubitat-Token`.

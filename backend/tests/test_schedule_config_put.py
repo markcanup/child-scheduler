@@ -38,12 +38,24 @@ class FakeSchedulesTable:
         self.items.append(Item)
 
 
-def _event(body, token="ui-token"):
-    return {
+def _event(body, token="ui-token", with_claims=True):
+    event = {
         "headers": {"Authorization": f"Bearer {token}"},
         "queryStringParameters": {"hubId": "hub-1"},
         "body": json.dumps(body),
     }
+    if with_claims:
+        event["requestContext"] = {
+            "authorizer": {
+                "jwt": {
+                    "claims": {
+                        "sub": "user-1",
+                        "custom:hubId": "hub-1",
+                    }
+                }
+            }
+        }
+    return event
 
 
 def _payload():

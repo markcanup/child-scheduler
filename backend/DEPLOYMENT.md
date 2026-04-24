@@ -35,7 +35,7 @@ Milestone 9 parameters for Cognito JWT browser auth:
 - Parameter `CognitoIssuerUrl`: `https://cognito-idp.<region>.amazonaws.com/<userPoolId>`
 - Parameter `CognitoAppClientId`: Cognito app client id
 
-If Cognito params are omitted/empty, browser-route auth falls back to Lambda-level stub bearer token validation (`UI_JWT_STUB_TOKEN`) for local development only.
+Browser routes now require Cognito JWT validation. If Cognito params are omitted/empty, browser-route requests are rejected with `401 UNAUTHORIZED`.
 
 ## 3) Route mapping
 
@@ -54,14 +54,18 @@ The HTTP API exposes:
 - `ACTION_CATALOGS_TABLE`
 - `SCHEDULES_TABLE`
 - `HUBITAT_TOKEN`
-- `UI_JWT_STUB_TOKEN`
 - `DEFAULT_HUB_ID`
+- `COGNITO_ISSUER_URL`
+- `COGNITO_APP_CLIENT_ID`
+- `ALLOWED_ORIGINS`
 
 ## 5) CORS behavior
 
 CORS is configured at the API Gateway HTTP API level.
 
-- `AllowedOrigins` controls allowed browser origins.
+- `AllowedOrigins` controls allowed browser origins and is injected into Lambda env for diagnostics.
+- Lambda responses include `X-Cors-Origin-Matched` and `X-Cors-Allowed-Origins` headers to improve debugging when the browser reports a generic "failed to fetch" CORS error.
+- Unauthorized browser responses include structured `error.details.cors` diagnostics.
 - Allowed methods: `GET`, `PUT`, `POST`, `OPTIONS`
 - Allowed headers: `Authorization`, `Content-Type`
 
