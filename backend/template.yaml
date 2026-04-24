@@ -16,6 +16,10 @@ Parameters:
     Type: String
     NoEcho: true
     Default: change-me
+  HubitatTokenLastRotated:
+    Type: String
+    Default: ""
+    Description: "Last Hubitat token rotation timestamp, expected format YYYY-MM-DD.HH:MM:SS (UTC)."
   UiJwtStubToken:
     Type: String
     Default: dev-ui-token
@@ -45,6 +49,7 @@ Globals:
         ACTION_CATALOGS_TABLE: !Ref ActionCatalogsTableName
         SCHEDULES_TABLE: !Ref SchedulesTableName
         HUBITAT_TOKEN: !Ref HubitatToken
+        HUBITAT_TOKEN_LAST_ROTATED: !Ref HubitatTokenLastRotated
         UI_JWT_STUB_TOKEN: !Ref UiJwtStubToken
         DEFAULT_HUB_ID: !Ref DefaultHubId
         COGNITO_ISSUER_URL: !Ref CognitoIssuerUrl

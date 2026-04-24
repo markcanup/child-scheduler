@@ -29,6 +29,7 @@ Recommended guided answers:
 - Parameter `AllowedOrigins`: comma-separated browser origins
   - Example: `https://app.example.com,http://localhost:5173`
 - Parameter `HubitatToken`: current Hubitat PSK
+- Parameter `HubitatTokenLastRotated`: PSK last-rotated timestamp in `YYYY-MM-DD.HH:MM:SS` (UTC) format (example: `2026-04-23.18:20:12`)
 
 Milestone 9 parameters for Cognito JWT browser auth:
 
@@ -54,6 +55,7 @@ The HTTP API exposes:
 - `ACTION_CATALOGS_TABLE`
 - `SCHEDULES_TABLE`
 - `HUBITAT_TOKEN`
+- `HUBITAT_TOKEN_LAST_ROTATED`
 - `DEFAULT_HUB_ID`
 - `COGNITO_ISSUER_URL`
 - `COGNITO_APP_CLIENT_ID`
@@ -75,30 +77,24 @@ See `backend/COGNITO_SETUP.md` for detailed setup steps and local-vs-deployed no
 
 ## 7) PSK operational policy (v1)
 
-The project brief requires managing the Hubitat PSK via AWS-backed UI profile preferences.
+### Storage + rotation source of truth
 
-### Storage
-
-- PSK must be persisted in an AWS-backed user profile/preferences store used by the UI.
-- Current Lambda auth uses `HUBITAT_TOKEN`; treat this as bootstrap/runtime wiring until UI profile-backed PSK plumbing is implemented.
-- Store PSK encrypted at rest (for example, KMS-backed encryption) and never log it.
+- Hubitat shared secret is managed as Lambda/SAM deployment configuration (`HUBITAT_TOKEN`), not via UI profile editing.
+- Rotation timestamp is managed via `HUBITAT_TOKEN_LAST_ROTATED`.
+- Store both values in secure deployment inputs (for example, GitHub Actions secrets/vars + SAM parameters), and never log the token.
 
 ### Rotation
 
 - Rotate PSK annually.
 - Rotation process:
   1. Generate a new PSK.
-  2. Update PSK in the UI preference/profile field.
-  3. Update Hubitat app config to match.
-  4. Verify `POST /hubitat/action-catalog` and `GET /hubitat/schedule` authentication succeeds.
-  5. Record rotation timestamp in profile metadata.
+  2. Update deployment secret/parameter for `HUBITAT_TOKEN`.
+  3. Update deployment parameter for `HUBITAT_TOKEN_LAST_ROTATED` using `YYYY-MM-DD.HH:MM:SS` (UTC).
+  4. Deploy SAM.
+  5. Update Hubitat app config to match.
+  6. Verify `POST /hubitat/action-catalog` and `GET /hubitat/schedule` authentication succeeds.
 
-### UI-only key-age warning
+### UI key-age warning
 
-- UI should surface a non-blocking warning when PSK age reaches **365 days**.
-- The warning should not block API calls by itself.
-- Show both:
-  - last rotated timestamp
-  - days since rotation
-
-This warning is informational and supports annual rotation hygiene.
+- UI surfaces a non-blocking warning when `HUBITAT_TOKEN_LAST_ROTATED` age reaches **365 days**.
+- Warning does not block API calls.

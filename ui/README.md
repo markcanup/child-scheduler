@@ -11,7 +11,7 @@ Minimal React + Vite UI scaffold that can call backend APIs and use Cognito-back
 - Local token paste fallback for development
 - Catalog status/debug panel (`GET /catalog`)
 - Schedule config viewer/editor (`GET /schedule/config`, `PUT /schedule/config`)
-- Authenticated profile/preferences flow for Hubitat PSK + last-rotated timestamp (local storage placeholder)
+- Authenticated profile/preferences panel that shows Hubitat token last-rotated status from backend metadata
 - Non-blocking warning when PSK age reaches 365+ days
 - Request failure diagnostics panel for network and HTTP errors (URL, method, status, response body when available)
 
