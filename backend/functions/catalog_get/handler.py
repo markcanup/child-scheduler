@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from shared.auth import AuthError, resolve_ui_hub_id, validate_ui_auth
 from shared.dynamodb import get_action_catalogs_table
-from shared.responses import error_response, json_response
+from shared.responses import cors_debug_info, error_response, json_response
 
 
 def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
@@ -15,7 +15,7 @@ def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
         item = result.get("Item")
 
         if not item:
-            return error_response(404, "NOT_FOUND", "Catalog not found")
+            return error_response(404, "NOT_FOUND", "Catalog not found", event=event)
 
         return json_response(
             200,
@@ -26,8 +26,18 @@ def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
                 "actionDefinitions": item.get("actionDefinitions", []),
                 "resources": item.get("resources", []),
             },
+            event=event,
         )
     except AuthError as exc:
-        return error_response(401, "UNAUTHORIZED", str(exc))
+        return error_response(
+            401,
+            "UNAUTHORIZED",
+            str(exc),
+            event=event,
+            details={
+                "authMode": "cognito-jwt",
+                "cors": cors_debug_info(event),
+            },
+        )
     except Exception:
-        return error_response(500, "INTERNAL_ERROR", "Unexpected server error")
+        return error_response(500, "INTERNAL_ERROR", "Unexpected server error", event=event)

@@ -14,7 +14,6 @@ class FakeTable:
 
 
 
-
 def _event_with_claims(hub_id_claim="hub-claims"):
     return {
         "headers": {},
@@ -31,18 +30,29 @@ def _event_with_claims(hub_id_claim="hub-claims"):
         "queryStringParameters": {},
     }
 
-def _event(token="ui-token", hub_id=None):
+
+def _event(token="ui-token", hub_id=None, with_claims=True):
     event = {
         "headers": {"Authorization": f"Bearer {token}"},
         "queryStringParameters": {},
     }
+    if with_claims:
+        event["requestContext"] = {
+            "authorizer": {
+                "jwt": {
+                    "claims": {
+                        "sub": "user-1",
+                        "custom:hubId": "hub-1",
+                    }
+                }
+            }
+        }
     if hub_id:
         event["queryStringParameters"]["hubId"] = hub_id
     return event
 
 
 def test_catalog_exists(monkeypatch):
-    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
     monkeypatch.setenv("DEFAULT_HUB_ID", "hub-1")
 
     item = {
@@ -66,7 +76,6 @@ def test_catalog_exists(monkeypatch):
 
 
 def test_catalog_missing(monkeypatch):
-    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
     monkeypatch.setenv("DEFAULT_HUB_ID", "hub-1")
     monkeypatch.setattr(
         "functions.catalog_get.handler.get_action_catalogs_table",
@@ -81,9 +90,9 @@ def test_catalog_missing(monkeypatch):
 
 
 def test_unauthorized_request(monkeypatch):
-    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
+    monkeypatch.delenv("COGNITO_ISSUER_URL", raising=False)
 
-    response = lambda_handler(_event(token="wrong-token"), None)
+    response = lambda_handler(_event(token="wrong-token", with_claims=False), None)
 
     assert response["statusCode"] == 401
     data = json.loads(response["body"])

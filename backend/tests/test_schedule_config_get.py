@@ -8,11 +8,22 @@ class FakeTable:
         self.items = items
 
 
-def _event(token="ui-token", hub_id=None):
+def _event(token="ui-token", hub_id=None, with_claims=True):
     event = {
         "headers": {"Authorization": f"Bearer {token}"},
         "queryStringParameters": {},
     }
+    if with_claims:
+        event["requestContext"] = {
+            "authorizer": {
+                "jwt": {
+                    "claims": {
+                        "sub": "user-1",
+                        "custom:hubId": "hub-1",
+                    }
+                }
+            }
+        }
     if hub_id:
         event["queryStringParameters"]["hubId"] = hub_id
     return event
@@ -91,7 +102,7 @@ def test_populated_hub_state(monkeypatch):
 def test_unauthorized_request(monkeypatch):
     monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
 
-    response = lambda_handler(_event(token="wrong-token"), None)
+    response = lambda_handler(_event(token="wrong-token", with_claims=False), None)
 
     assert response["statusCode"] == 401
     data = json.loads(response["body"])

@@ -47,6 +47,9 @@ Globals:
         HUBITAT_TOKEN: !Ref HubitatToken
         UI_JWT_STUB_TOKEN: !Ref UiJwtStubToken
         DEFAULT_HUB_ID: !Ref DefaultHubId
+        COGNITO_ISSUER_URL: !Ref CognitoIssuerUrl
+        COGNITO_APP_CLIENT_ID: !Ref CognitoAppClientId
+        ALLOWED_ORIGINS: !Ref AllowedOrigins
 
 Resources:
   ChildSchedulerApi:
@@ -54,10 +57,7 @@ Resources:
     Properties:
       StageName: !Ref StageName
       CorsConfiguration:
-#        AllowOrigins: !Split [",", !Ref AllowedOrigins]
-        AllowOrigins:
-          - "https://ubuntu24.lan:5179"
-          - "http://localhost:5174"
+        AllowOrigins: !Split [",", !Ref AllowedOrigins]
         AllowHeaders:
           - Authorization
           - Content-Type
