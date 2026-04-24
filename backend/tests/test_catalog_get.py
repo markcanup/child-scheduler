@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 
 from functions.catalog_get.handler import lambda_handler
 
@@ -119,3 +120,27 @@ def test_catalog_exists_with_cognito_claims(monkeypatch):
     assert response["statusCode"] == 200
     data = json.loads(response["body"])
     assert data["hubId"] == "hub-claims"
+
+
+def test_catalog_serializes_decimal_and_legacy_generated_at(monkeypatch):
+    monkeypatch.setenv("DEFAULT_HUB_ID", "hub-1")
+
+    item = {
+        "hubId": "hub-1",
+        "updatedAt": "2026-04-24T00:00:00Z",
+        "catalogVersion": Decimal("2"),
+        "actionDefinitions": [{"actionType": "speech", "weight": Decimal("1.5")}],
+        "resources": [{"resourceId": "speechTarget:1", "type": "speechTarget", "label": "Kid Room"}],
+    }
+    monkeypatch.setattr(
+        "functions.catalog_get.handler.get_action_catalogs_table",
+        lambda: FakeTable(item=item),
+    )
+
+    response = lambda_handler(_event(), None)
+
+    assert response["statusCode"] == 200
+    data = json.loads(response["body"])
+    assert data["generatedAt"] == "2026-04-24T00:00:00Z"
+    assert data["catalogVersion"] == 2
+    assert data["actionDefinitions"][0]["weight"] == 1.5
