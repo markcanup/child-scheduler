@@ -11,24 +11,56 @@ import ProfilePreferencesPanel from "./components/ProfilePreferencesPanel";
 import ScheduleConfigPanel from "./components/ScheduleConfigPanel";
 
 const TOKEN_STORAGE_KEY = "childScheduler.uiAuthToken";
+const TOKEN_SESSION_STORAGE_KEY = "childScheduler.uiAuthSession";
 const PKCE_VERIFIER_STORAGE_KEY = "childScheduler.pkceVerifier";
+const EXCHANGED_CODES_STORAGE_KEY = "childScheduler.exchangedOAuthCodes";
+let inFlightCodeExchange = null;
+let inFlightCodeValue = "";
 
 function trimTrailingSlash(url) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
-function tokenFromHash() {
+function tokensFromHash() {
   const hash = window.location.hash || "";
   if (!hash.startsWith("#")) {
-    return "";
+    return null;
   }
   const params = new URLSearchParams(hash.slice(1));
-  return params.get("id_token") || params.get("access_token") || "";
+  const idToken = params.get("id_token") || "";
+  const accessToken = params.get("access_token") || "";
+  if (!idToken && !accessToken) {
+    return null;
+  }
+  return { idToken, accessToken };
 }
 
 function parseCodeFromSearch() {
   const params = new URLSearchParams(window.location.search);
   return params.get("code") || "";
+}
+
+function loadExchangedCodes() {
+  try {
+    const raw = sessionStorage.getItem(EXCHANGED_CODES_STORAGE_KEY) || "[]";
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function hasExchangedCode(code) {
+  return loadExchangedCodes().includes(code);
+}
+
+function markCodeAsExchanged(code) {
+  const current = loadExchangedCodes();
+  if (current.includes(code)) {
+    return;
+  }
+  const next = [...current, code].slice(-10);
+  sessionStorage.setItem(EXCHANGED_CODES_STORAGE_KEY, JSON.stringify(next));
 }
 
 function isJwtLike(value) {
@@ -54,11 +86,11 @@ async function sha256Base64Url(input) {
 
 async function exchangeCodeForTokens(code) {
   if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
-    return "";
+    return { tokens: null, error: "Missing Cognito domain/client configuration." };
   }
   const verifier = localStorage.getItem(PKCE_VERIFIER_STORAGE_KEY) || "";
   if (!verifier) {
-    return "";
+    return { tokens: null, error: "Missing PKCE code_verifier in browser storage." };
   }
 
   const body = new URLSearchParams({
@@ -75,10 +107,55 @@ async function exchangeCodeForTokens(code) {
     body,
   });
   if (!response.ok) {
-    return "";
+    const responseBody = await response.text();
+    return {
+      tokens: null,
+      error: `Token endpoint rejected the code (${response.status}). ${responseBody || "No response body."}`,
+    };
   }
   const payload = await response.json();
-  return payload.id_token || payload.access_token || "";
+  const idToken = payload.id_token || "";
+  const accessToken = payload.access_token || "";
+  if (!idToken && !accessToken) {
+    return { tokens: null, error: "Token endpoint response did not include id_token or access_token." };
+  }
+  return { tokens: { idToken, accessToken }, error: "" };
+}
+
+function exchangeCodeForTokensOnce(code) {
+  if (inFlightCodeExchange && inFlightCodeValue === code) {
+    return inFlightCodeExchange;
+  }
+  inFlightCodeValue = code;
+  inFlightCodeExchange = exchangeCodeForTokens(code).finally(() => {
+    inFlightCodeExchange = null;
+    inFlightCodeValue = "";
+  });
+  return inFlightCodeExchange;
+}
+
+function getBearerToken(session) {
+  return session?.accessToken || session?.idToken || "";
+}
+
+function persistSession(session, setAuthToken) {
+  localStorage.setItem(TOKEN_SESSION_STORAGE_KEY, JSON.stringify(session));
+  const bearerToken = getBearerToken(session);
+  localStorage.setItem(TOKEN_STORAGE_KEY, bearerToken);
+  setAuthToken(bearerToken);
+}
+
+function loadInitialBearerToken() {
+  const sessionRaw = localStorage.getItem(TOKEN_SESSION_STORAGE_KEY) || "";
+  if (sessionRaw) {
+    try {
+      const parsed = JSON.parse(sessionRaw);
+      return getBearerToken(parsed);
+    } catch {
+      return localStorage.getItem(TOKEN_STORAGE_KEY) || "";
+    }
+  }
+  return localStorage.getItem(TOKEN_STORAGE_KEY) || "";
 }
 
 async function buildHostedLoginUrl() {
@@ -100,7 +177,8 @@ async function buildHostedLoginUrl() {
 }
 
 export default function App() {
-  const [authToken, setAuthToken] = useState(localStorage.getItem(TOKEN_STORAGE_KEY) || "");
+  const isCognitoConfigured = Boolean(COGNITO_DOMAIN && COGNITO_CLIENT_ID);
+  const [authToken, setAuthToken] = useState(loadInitialBearerToken());
   const [draftToken, setDraftToken] = useState("");
   const [loginUrl, setLoginUrl] = useState("");
   const [authHint, setAuthHint] = useState("");
@@ -109,39 +187,51 @@ export default function App() {
     let mounted = true;
 
     async function initializeAuth() {
-      if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
-        const generatedLoginUrl = await buildHostedLoginUrl();
-        if (mounted) {
-          setLoginUrl(generatedLoginUrl);
-        }
-      }
-
       const code = parseCodeFromSearch();
       if (code) {
-        const codeToken = await exchangeCodeForTokens(code);
-        if (codeToken && mounted) {
-          localStorage.setItem(TOKEN_STORAGE_KEY, codeToken);
+        if (mounted && hasExchangedCode(code)) {
+          setAuthHint(
+            "This OAuth code was already used from this tab/session. Please sign in again to get a fresh code.",
+          );
+          return;
+        }
+
+        const { tokens, error } = await exchangeCodeForTokensOnce(code);
+        if (tokens && mounted) {
+          markCodeAsExchanged(code);
+          persistSession(tokens, setAuthToken);
           localStorage.removeItem(PKCE_VERIFIER_STORAGE_KEY);
-          setAuthToken(codeToken);
           setDraftToken("");
-          const nextUrl = `${window.location.pathname}`;
-          window.history.replaceState({}, document.title, nextUrl);
+          const cleanUrl = `${window.location.pathname}`;
+          window.history.replaceState({}, document.title, cleanUrl);
           return;
         }
         if (mounted) {
           setAuthHint(
-            "Found OAuth code in URL but token exchange failed. Please sign in again from this browser tab, or paste a JWT access/id token (not the code value).",
+            `Found OAuth code in URL but token exchange failed. ${error || ""} Please sign in again from this browser tab, or paste a JWT access/id token (not the code value).`,
           );
         }
       }
 
-      const hashToken = tokenFromHash();
-      if (!hashToken || !mounted) {
+      if (isCognitoConfigured) {
+        try {
+          const generatedLoginUrl = await buildHostedLoginUrl();
+          if (mounted) {
+            setLoginUrl(generatedLoginUrl);
+          }
+        } catch {
+          if (mounted) {
+            setAuthHint("Unable to build Cognito login URL in this browser context.");
+          }
+        }
+      }
+
+      const hashTokens = tokensFromHash();
+      if (!hashTokens || !mounted) {
         return;
       }
 
-      localStorage.setItem(TOKEN_STORAGE_KEY, hashToken);
-      setAuthToken(hashToken);
+      persistSession(hashTokens, setAuthToken);
       setDraftToken("");
 
       const nextUrl = `${window.location.pathname}${window.location.search}`;
@@ -152,7 +242,7 @@ export default function App() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [isCognitoConfigured]);
 
   function saveDraftToken() {
     const candidate = draftToken.trim();
@@ -161,18 +251,16 @@ export default function App() {
     }
     setAuthHint("");
     if (isJwtLike(candidate)) {
-      localStorage.setItem(TOKEN_STORAGE_KEY, candidate);
-      setAuthToken(candidate);
+      persistSession({ accessToken: candidate, idToken: "" }, setAuthToken);
       setDraftToken("");
       return;
     }
 
     if (COGNITO_DOMAIN && COGNITO_CLIENT_ID) {
       exchangeCodeForTokens(candidate)
-        .then((token) => {
-          if (token) {
-            localStorage.setItem(TOKEN_STORAGE_KEY, token);
-            setAuthToken(token);
+        .then(({ tokens }) => {
+          if (tokens && getBearerToken(tokens)) {
+            persistSession(tokens, setAuthToken);
             setDraftToken("");
             return;
           }
@@ -195,6 +283,8 @@ export default function App() {
 
   function signOut() {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_SESSION_STORAGE_KEY);
+    localStorage.removeItem(PKCE_VERIFIER_STORAGE_KEY);
     setAuthToken("");
     setDraftToken("");
   }
@@ -211,6 +301,7 @@ export default function App() {
         authToken={authToken}
         draftToken={draftToken}
         loginUrl={loginUrl}
+        isCognitoConfigured={isCognitoConfigured}
         onTokenChange={setDraftToken}
         onSaveToken={saveDraftToken}
         onSignOut={signOut}

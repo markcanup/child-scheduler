@@ -40,6 +40,7 @@ export default function LoginPlaceholder({
   authToken,
   draftToken,
   loginUrl,
+  isCognitoConfigured,
   authHint,
   onTokenChange,
   onSaveToken,
@@ -72,7 +73,7 @@ export default function LoginPlaceholder({
         </a>
       </div>
 
-      {!loginUrl && (
+      {!isCognitoConfigured && (
         <p className="warning">
           Set <code>VITE_COGNITO_DOMAIN</code> and <code>VITE_COGNITO_CLIENT_ID</code> to enable hosted sign-in.
         </p>
