@@ -121,3 +121,52 @@ code {
   margin-top: 10px;
   background: #f9fafb;
 }
+
+.schedule-id-row {
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.field-inline {
+  flex: 1;
+  margin: 0;
+}
+
+.checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.checkbox-inline input {
+  margin: 0;
+  width: auto;
+}
+
+.day-grid-fieldset {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  margin: 10px 0;
+  padding: 8px 12px 12px;
+}
+
+.day-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.day-option {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.day-option input {
+  width: auto;
+  margin: 0;
+}

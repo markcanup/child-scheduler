@@ -1,7 +1,7 @@
 import { useState } from "react";
 import RequestDiagnostics from "./RequestDiagnostics";
 import { DEFAULT_HUB_ID } from "../config";
-import { getScheduleConfig, putScheduleConfig } from "../services/api";
+import { getCatalog, getScheduleConfig, putScheduleConfig } from "../services/api";
 
 const DAYS_OF_WEEK = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const ACTION_TYPES = ["rule", "speech", "notify"];
@@ -103,6 +103,7 @@ export default function ScheduleConfigPanel({ authToken }) {
   const [scheduleConfig, setScheduleConfig] = useState(defaultPayload());
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [jsonText, setJsonText] = useState(JSON.stringify(defaultPayload(), null, 2));
+  const [catalogResources, setCatalogResources] = useState([]);
 
   function setSchedules(nextSchedules) {
     setScheduleConfig((current) => ({
@@ -135,8 +136,9 @@ export default function ScheduleConfigPanel({ authToken }) {
     setMessage("");
     setDiagnostics(null);
     try {
-      const data = await getScheduleConfig(authToken);
+      const [data, catalog] = await Promise.all([getScheduleConfig(authToken), getCatalog(authToken)]);
       applyLoadedSchedule(data);
+      setCatalogResources(Array.isArray(catalog?.resources) ? catalog.resources : []);
       setStatus("success");
       setMessage("Schedule loaded.");
     } catch (err) {
@@ -215,10 +217,29 @@ export default function ScheduleConfigPanel({ authToken }) {
     setSchedules(next);
   }
 
+  function updateSelectedScheduleDays(dayCode, checked) {
+    updateSelectedSchedule((current) => {
+      const existingDays = Array.isArray(current.daysOfWeek) ? current.daysOfWeek : [];
+      const nextDays = checked
+        ? [...new Set([...existingDays, dayCode])]
+        : existingDays.filter((day) => day !== dayCode);
+      return {
+        ...current,
+        daysOfWeek: nextDays,
+      };
+    });
+  }
+
   const selectedSchedule =
     selectedIndex >= 0 && selectedIndex < scheduleConfig.scheduleDefinitions.length
       ? scheduleConfig.scheduleDefinitions[selectedIndex]
       : null;
+  const relativeScheduleOptions = scheduleConfig.scheduleDefinitions.filter(
+    (schedule, index) => index !== selectedIndex && Boolean(schedule.scheduleId),
+  );
+  const ruleTargets = catalogResources.filter((resource) => resource.type === "rule");
+  const speechTargets = catalogResources.filter((resource) => resource.type === "speechTarget");
+  const notifyTargets = catalogResources.filter((resource) => resource.type === "notifyDevice");
 
   return (
     <section className="card">
@@ -280,50 +301,41 @@ export default function ScheduleConfigPanel({ authToken }) {
             />
           </label>
 
-          <label>
-            Schedule ID
-            <input
-              value={selectedSchedule.scheduleId || ""}
-              onChange={(event) =>
-                updateSelectedSchedule((current) => ({
-                  ...current,
-                  scheduleId: event.target.value,
-                }))
-              }
-            />
-          </label>
+          <div className="row schedule-id-row">
+            <label className="field-inline">
+              Schedule ID
+              <input value={selectedSchedule.scheduleId || ""} readOnly />
+            </label>
+            <label className="checkbox-inline">
+              <input
+                type="checkbox"
+                checked={Boolean(selectedSchedule.enabled)}
+                onChange={(event) =>
+                  updateSelectedSchedule((current) => ({
+                    ...current,
+                    enabled: event.target.checked,
+                  }))
+                }
+              />
+              Enabled
+            </label>
+          </div>
 
-          <label>
-            Enabled
-            <select
-              value={selectedSchedule.enabled ? "true" : "false"}
-              onChange={(event) =>
-                updateSelectedSchedule((current) => ({
-                  ...current,
-                  enabled: event.target.value === "true",
-                }))
-              }
-            >
-              <option value="true">true</option>
-              <option value="false">false</option>
-            </select>
-          </label>
-
-          <label>
-            Days of week (comma separated)
-            <input
-              value={(selectedSchedule.daysOfWeek || []).join(",")}
-              onChange={(event) =>
-                updateSelectedSchedule((current) => ({
-                  ...current,
-                  daysOfWeek: event.target.value
-                    .split(",")
-                    .map((value) => value.trim().toUpperCase())
-                    .filter(Boolean),
-                }))
-              }
-            />
-          </label>
+          <fieldset className="day-grid-fieldset">
+            <legend>Days of week</legend>
+            <div className="day-grid">
+              {DAYS_OF_WEEK.map((day) => (
+                <label key={day} className="day-option">
+                  <span>{day}</span>
+                  <input
+                    type="checkbox"
+                    checked={Array.isArray(selectedSchedule.daysOfWeek) && selectedSchedule.daysOfWeek.includes(day)}
+                    onChange={(event) => updateSelectedScheduleDays(day, event.target.checked)}
+                  />
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           <label>
             Time mode
@@ -361,7 +373,7 @@ export default function ScheduleConfigPanel({ authToken }) {
             <>
               <label>
                 Relative to schedule ID
-                <input
+                <select
                   value={selectedSchedule.relativeToScheduleId || ""}
                   onChange={(event) =>
                     updateSelectedSchedule((current) => ({
@@ -369,7 +381,14 @@ export default function ScheduleConfigPanel({ authToken }) {
                       relativeToScheduleId: event.target.value,
                     }))
                   }
-                />
+                >
+                  <option value="">Select schedule</option>
+                  {relativeScheduleOptions.map((schedule) => (
+                    <option key={schedule.scheduleId} value={schedule.scheduleId}>
+                      {schedule.name || schedule.scheduleId} ({schedule.scheduleId})
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 Offset minutes
@@ -409,7 +428,7 @@ export default function ScheduleConfigPanel({ authToken }) {
           {selectedSchedule.actionType === "rule" && (
             <label>
               Rule targetId
-              <input
+              <select
                 value={selectedSchedule.parameters?.targetId || ""}
                 onChange={(event) =>
                   updateSelectedSchedule((current) => ({
@@ -419,7 +438,14 @@ export default function ScheduleConfigPanel({ authToken }) {
                     },
                   }))
                 }
-              />
+              >
+                <option value="">Select rule target</option>
+                {ruleTargets.map((resource) => (
+                  <option key={resource.resourceId} value={resource.resourceId}>
+                    {resource.label || resource.resourceId} ({resource.resourceId})
+                  </option>
+                ))}
+              </select>
             </label>
           )}
 
@@ -427,7 +453,7 @@ export default function ScheduleConfigPanel({ authToken }) {
             <>
               <label>
                 Speech targetId
-                <input
+                <select
                   value={selectedSchedule.parameters?.targetId || ""}
                   onChange={(event) =>
                     updateSelectedSchedule((current) => ({
@@ -438,7 +464,14 @@ export default function ScheduleConfigPanel({ authToken }) {
                       },
                     }))
                   }
-                />
+                >
+                  <option value="">Select speech target</option>
+                  {speechTargets.map((resource) => (
+                    <option key={resource.resourceId} value={resource.resourceId}>
+                      {resource.label || resource.resourceId} ({resource.resourceId})
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 Speech text
@@ -461,22 +494,26 @@ export default function ScheduleConfigPanel({ authToken }) {
           {selectedSchedule.actionType === "notify" && (
             <>
               <label>
-                Notify targetIds (comma separated)
-                <input
-                  value={Array.isArray(selectedSchedule.parameters?.targetIds) ? selectedSchedule.parameters.targetIds.join(",") : ""}
+                Notify targetIds
+                <select
+                  multiple
+                  value={Array.isArray(selectedSchedule.parameters?.targetIds) ? selectedSchedule.parameters.targetIds : []}
                   onChange={(event) =>
                     updateSelectedSchedule((current) => ({
                       ...current,
                       parameters: {
                         ...current.parameters,
-                        targetIds: event.target.value
-                          .split(",")
-                          .map((value) => value.trim())
-                          .filter(Boolean),
+                        targetIds: Array.from(event.target.selectedOptions, (option) => option.value),
                       },
                     }))
                   }
-                />
+                >
+                  {notifyTargets.map((resource) => (
+                    <option key={resource.resourceId} value={resource.resourceId}>
+                      {resource.label || resource.resourceId} ({resource.resourceId})
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 Notify text
