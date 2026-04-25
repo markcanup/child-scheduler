@@ -56,7 +56,8 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid #d1d5db;
   border-radius: 8px;
@@ -113,4 +114,10 @@ pre {
 
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+
+.nested-card {
+  margin-top: 10px;
+  background: #f9fafb;
 }
