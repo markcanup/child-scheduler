@@ -124,12 +124,7 @@ code {
 
 .schedule-id-row {
   justify-content: space-between;
-  align-items: flex-end;
-}
-
-.field-inline {
-  flex: 1;
-  margin: 0;
+  align-items: center;
 }
 
 .checkbox-inline {
@@ -169,4 +164,30 @@ code {
 .day-option input {
   width: auto;
   margin: 0;
+}
+
+.schedule-id-text {
+  font-size: 13px;
+}
+
+.multiselect {
+  min-height: 120px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.summary-day {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+  background: #f9fafb;
+}
+
+.summary-day h4 {
+  margin: 0 0 6px;
 }

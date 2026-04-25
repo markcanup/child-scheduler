@@ -6,6 +6,11 @@ import { getCatalog, getScheduleConfig, putScheduleConfig } from "../services/ap
 const DAYS_OF_WEEK = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const ACTION_TYPES = ["rule", "speech", "notify"];
 const TIME_MODES = ["absolute", "relative"];
+const RESOURCE_TYPE_ALIASES = {
+  rule: "rule",
+  speechtarget: "speechTarget",
+  notifydevice: "notifyDevice",
+};
 
 function defaultPayload() {
   return {
@@ -51,6 +56,21 @@ function normalizeScheduleConfig(payload) {
   };
 }
 
+function normalizeCatalogResource(resource) {
+  const rawType = resource?.type || resource?.resourceType || "";
+  const normalizedType = RESOURCE_TYPE_ALIASES[String(rawType).toLowerCase()] || rawType;
+  const resourceId = resource?.resourceId || "";
+  const inferredType = resourceId.includes(":")
+    ? RESOURCE_TYPE_ALIASES[resourceId.split(":")[0].toLowerCase()] || ""
+    : "";
+
+  return {
+    ...resource,
+    resourceId,
+    type: normalizedType || inferredType,
+  };
+}
+
 function sanitizeSchedule(schedule) {
   const base = {
     ...schedule,
@@ -91,6 +111,9 @@ function sanitizeSchedule(schedule) {
 
   if (base.timeMode === "absolute") {
     base.relativeToScheduleId = "";
+    base.offsetMinutes = 0;
+  } else {
+    base.baseTime = "";
   }
 
   return base;
@@ -104,6 +127,7 @@ export default function ScheduleConfigPanel({ authToken }) {
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [jsonText, setJsonText] = useState(JSON.stringify(defaultPayload(), null, 2));
   const [catalogResources, setCatalogResources] = useState([]);
+  const [compiledSummary, setCompiledSummary] = useState([]);
 
   function setSchedules(nextSchedules) {
     setScheduleConfig((current) => ({
@@ -113,7 +137,48 @@ export default function ScheduleConfigPanel({ authToken }) {
   }
 
   function generateScheduleJson(config = scheduleConfig) {
-    const generated = normalizeScheduleConfig(config);
+    const normalized = normalizeScheduleConfig(config);
+    const cleanedDefinitions = normalized.scheduleDefinitions.map((schedule) => {
+      const sanitized = sanitizeSchedule(schedule);
+      const base = {
+        scheduleId: sanitized.scheduleId,
+        name: sanitized.name,
+        enabled: sanitized.enabled,
+        daysOfWeek: sanitized.daysOfWeek,
+        timeMode: sanitized.timeMode,
+        actionType: sanitized.actionType,
+      };
+
+      if (sanitized.timeMode === "absolute") {
+        base.baseTime = sanitized.baseTime;
+      } else {
+        base.relativeToScheduleId = sanitized.relativeToScheduleId;
+        base.offsetMinutes = sanitized.offsetMinutes;
+      }
+
+      if (sanitized.actionType === "rule") {
+        base.parameters = {
+          targetId: sanitized.parameters?.targetId || "",
+        };
+      } else if (sanitized.actionType === "speech") {
+        base.parameters = {
+          targetId: sanitized.parameters?.targetId || "",
+          text: sanitized.parameters?.text || "",
+        };
+      } else {
+        base.parameters = {
+          targetIds: Array.isArray(sanitized.parameters?.targetIds) ? sanitized.parameters.targetIds : [],
+          text: sanitized.parameters?.text || "",
+        };
+      }
+
+      return base;
+    });
+
+    const generated = {
+      ...normalized,
+      scheduleDefinitions: cleanedDefinitions,
+    };
     setJsonText(JSON.stringify(generated, null, 2));
     return generated;
   }
@@ -129,6 +194,7 @@ export default function ScheduleConfigPanel({ authToken }) {
     setScheduleConfig(nextConfig);
     setSelectedIndex(sanitizedSchedules.length > 0 ? 0 : -1);
     generateScheduleJson(nextConfig);
+    setCompiledSummary([]);
   }
 
   async function loadScheduleConfig() {
@@ -138,7 +204,7 @@ export default function ScheduleConfigPanel({ authToken }) {
     try {
       const [data, catalog] = await Promise.all([getScheduleConfig(authToken), getCatalog(authToken)]);
       applyLoadedSchedule(data);
-      setCatalogResources(Array.isArray(catalog?.resources) ? catalog.resources : []);
+      setCatalogResources(Array.isArray(catalog?.resources) ? catalog.resources.map(normalizeCatalogResource) : []);
       setStatus("success");
       setMessage("Schedule loaded.");
     } catch (err) {
@@ -152,7 +218,25 @@ export default function ScheduleConfigPanel({ authToken }) {
     setStatus("success");
     setMessage("Generated JSON from editor state.");
     setDiagnostics(null);
-    generateScheduleJson();
+    const generated = generateScheduleJson();
+    const summaryByDay = DAYS_OF_WEEK.map((day) => {
+      const events = generated.scheduleDefinitions
+        .filter((schedule) => schedule.enabled && Array.isArray(schedule.daysOfWeek) && schedule.daysOfWeek.includes(day))
+        .map((schedule) => {
+          const when =
+            schedule.timeMode === "absolute"
+              ? schedule.baseTime || "N/A"
+              : `relative to ${schedule.relativeToScheduleId || "unselected"} (${schedule.offsetMinutes || 0} min)`;
+          return {
+            scheduleId: schedule.scheduleId,
+            name: schedule.name || schedule.scheduleId,
+            when,
+            actionType: schedule.actionType,
+          };
+        });
+      return { day, events };
+    });
+    setCompiledSummary(summaryByDay);
   }
 
   async function saveScheduleConfig() {
@@ -167,6 +251,25 @@ export default function ScheduleConfigPanel({ authToken }) {
       setStatus("success");
       setMessage(`Saved scheduleVersion ${response.scheduleVersion}.`);
       if (response.compiledPreview || response.brokenReferences) {
+        const previewByDay = {};
+        (response.compiledPreview || []).forEach((event) => {
+          if (!previewByDay[event.date]) {
+            previewByDay[event.date] = [];
+          }
+          previewByDay[event.date].push(event);
+        });
+        const ordered = Object.keys(previewByDay)
+          .sort()
+          .map((date) => ({
+            day: date,
+            events: previewByDay[date].map((event) => ({
+              scheduleId: event.sourceScheduleId,
+              name: event.sourceScheduleId,
+              when: event.time,
+              actionType: event.actionType,
+            })),
+          }));
+        setCompiledSummary(ordered);
         setJsonText(
           JSON.stringify(
             {
@@ -302,10 +405,6 @@ export default function ScheduleConfigPanel({ authToken }) {
           </label>
 
           <div className="row schedule-id-row">
-            <label className="field-inline">
-              Schedule ID
-              <input value={selectedSchedule.scheduleId || ""} readOnly />
-            </label>
             <label className="checkbox-inline">
               <input
                 type="checkbox"
@@ -319,6 +418,7 @@ export default function ScheduleConfigPanel({ authToken }) {
               />
               Enabled
             </label>
+            <span className="muted schedule-id-text">Schedule ID: {selectedSchedule.scheduleId || "N/A"}</span>
           </div>
 
           <fieldset className="day-grid-fieldset">
@@ -497,6 +597,7 @@ export default function ScheduleConfigPanel({ authToken }) {
                 Notify targetIds
                 <select
                   multiple
+                  className="multiselect"
                   value={Array.isArray(selectedSchedule.parameters?.targetIds) ? selectedSchedule.parameters.targetIds : []}
                   onChange={(event) =>
                     updateSelectedSchedule((current) => ({
@@ -508,6 +609,9 @@ export default function ScheduleConfigPanel({ authToken }) {
                     }))
                   }
                 >
+                  <option disabled value="">
+                    Select one or more notify targets
+                  </option>
                   {notifyTargets.map((resource) => (
                     <option key={resource.resourceId} value={resource.resourceId}>
                       {resource.label || resource.resourceId} ({resource.resourceId})
@@ -537,6 +641,29 @@ export default function ScheduleConfigPanel({ authToken }) {
 
       <h3>Generated JSON</h3>
       <textarea aria-label="Schedule config JSON" value={jsonText} readOnly rows={18} />
+      <h3>Compiled Schedule Summary</h3>
+      {compiledSummary.length === 0 ? (
+        <p className="muted">Press Generate to see a day-by-day summary.</p>
+      ) : (
+        <div className="summary-grid">
+          {compiledSummary.map((daySummary) => (
+            <div key={daySummary.day} className="summary-day">
+              <h4>{daySummary.day}</h4>
+              {daySummary.events.length === 0 ? (
+                <p className="muted">No enabled events.</p>
+              ) : (
+                <ul>
+                  {daySummary.events.map((event, idx) => (
+                    <li key={`${daySummary.day}-${event.scheduleId}-${idx}`}>
+                      <strong>{event.when}</strong> — {event.name} ({event.actionType})
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
