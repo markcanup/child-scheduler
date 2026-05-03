@@ -106,6 +106,68 @@ def test_time_resolution_absolute_relative_and_chained():
     assert times == ["07:00", "07:05", "07:15"]
 
 
+def test_time_resolution_uses_day_specific_absolute_times():
+    defs = _base_defs()
+    defs[0].pop("baseTime")
+    defs[0]["dayTimes"] = {"MON": "07:00", "TUE": "08:30"}
+    defs[0]["daysOfWeek"] = ["MON", "TUE"]
+    defs[1]["daysOfWeek"] = []
+
+    monday = compile_schedule(
+        hub_id="hub-1",
+        schedule_definitions=defs,
+        day_configs=[],
+        catalog=_catalog(),
+        start_date=date(2026, 4, 20),
+        days=1,
+    )
+    assert [event["time"] for event in monday["eventItems"]] == ["07:00", "07:05"]
+
+    tuesday = compile_schedule(
+        hub_id="hub-1",
+        schedule_definitions=defs,
+        day_configs=[],
+        catalog=_catalog(),
+        start_date=date(2026, 4, 21),
+        days=1,
+    )
+    assert [event["time"] for event in tuesday["eventItems"]] == ["08:30", "08:35"]
+
+
+def test_relative_schedule_applies_on_parent_days_without_its_own_days():
+    defs = [
+        {
+            "scheduleId": "wake",
+            "name": "Wake",
+            "enabled": True,
+            "dayTimes": {"TUE": "08:00"},
+            "timeMode": "absolute",
+            "actionType": "rule",
+            "parameters": {"targetId": "rule:1"},
+        },
+        {
+            "scheduleId": "announce",
+            "name": "Announce",
+            "enabled": True,
+            "timeMode": "relative",
+            "relativeToScheduleId": "wake",
+            "offsetMinutes": 15,
+            "actionType": "speech",
+            "parameters": {"targetId": "speechTarget:1", "text": "Wake up"},
+        },
+    ]
+    result = compile_schedule(
+        hub_id="hub-1",
+        schedule_definitions=defs,
+        day_configs=[],
+        catalog=_catalog(),
+        start_date=date(2026, 4, 21),
+        days=1,
+    )
+    assert [event["sourceScheduleId"] for event in result["eventItems"]] == ["wake", "announce"]
+    assert [event["time"] for event in result["eventItems"]] == ["08:00", "08:15"]
+
+
 def test_time_resolution_disabled_schedule_excluded():
     defs = _base_defs()
     defs[0]["enabled"] = False

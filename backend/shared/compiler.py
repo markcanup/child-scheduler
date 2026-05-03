@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 VALID_ACTION_TYPES = {"rule", "speech", "notify"}
 VALID_TIME_MODES = {"absolute", "relative"}
 VALID_DAYS = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}
+WEEKDAY_ORDER = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
 
 
 @dataclass
@@ -65,17 +66,31 @@ def validate_schedule_definitions(schedule_definitions: List[Dict[str, Any]]) ->
         if not isinstance(definition.get("parameters"), dict):
             raise CompilerValidationError(f"Missing required field: parameters for {schedule_id}")
 
-        days_of_week = definition.get("daysOfWeek")
-        if not isinstance(days_of_week, list) or not days_of_week:
-            raise CompilerValidationError(f"Missing required field: daysOfWeek for {schedule_id}")
-        for day in days_of_week:
-            if day not in VALID_DAYS:
-                raise CompilerValidationError(f"Invalid day value for {schedule_id}: {day}")
-
         if time_mode == "absolute":
-            if not definition.get("baseTime"):
-                raise CompilerValidationError(f"Missing required field: baseTime for {schedule_id}")
-            _parse_time(definition["baseTime"])
+            day_times = definition.get("dayTimes")
+            if day_times is None:
+                # Backward-compatible path: daysOfWeek + baseTime
+                days_of_week = definition.get("daysOfWeek")
+                if not isinstance(days_of_week, list) or not days_of_week:
+                    raise CompilerValidationError(
+                        f"Missing required field: daysOfWeek for {schedule_id}"
+                    )
+                for day in days_of_week:
+                    if day not in VALID_DAYS:
+                        raise CompilerValidationError(f"Invalid day value for {schedule_id}: {day}")
+
+                if not definition.get("baseTime"):
+                    raise CompilerValidationError(f"Missing required field: baseTime for {schedule_id}")
+                _parse_time(definition["baseTime"])
+            else:
+                if not isinstance(day_times, dict) or not day_times:
+                    raise CompilerValidationError(
+                        f"Missing required field: dayTimes for {schedule_id}"
+                    )
+                for day, time_value in day_times.items():
+                    if day not in VALID_DAYS:
+                        raise CompilerValidationError(f"Invalid day value for {schedule_id}: {day}")
+                    _parse_time(time_value)
         else:
             if not definition.get("relativeToScheduleId"):
                 raise CompilerValidationError(
@@ -123,19 +138,28 @@ def build_effective_day_config(compile_date: date, day_configs: List[Dict[str, A
 def get_applicable_schedule_definitions(
     schedule_definitions: List[Dict[str, Any]], compile_date: date, day_config: Dict[str, Any]
 ) -> List[Dict[str, Any]]:
-    weekday = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"][compile_date.weekday()]
+    weekday = WEEKDAY_ORDER[compile_date.weekday()]
     overrides = day_config.get("overrides", {})
 
     applicable = []
     for definition in schedule_definitions:
         if not definition.get("enabled", True):
             continue
-        if weekday not in definition.get("daysOfWeek", []):
-            continue
 
         schedule_id = definition["scheduleId"]
         override = overrides.get(schedule_id, {})
         if override.get("enabled") is False:
+            continue
+
+        if definition.get("timeMode") == "relative":
+            applicable.append(definition)
+            continue
+
+        day_times = definition.get("dayTimes")
+        if isinstance(day_times, dict):
+            if weekday not in day_times:
+                continue
+        elif weekday not in definition.get("daysOfWeek", []):
             continue
 
         applicable.append(definition)
@@ -146,8 +170,6 @@ def get_applicable_schedule_definitions(
 def resolve_times_for_date(
     definitions: List[Dict[str, Any]], compile_date: date, day_config: Dict[str, Any]
 ) -> List[Dict[str, Any]]:
-    del compile_date  # currently not needed outside day override logic
-
     by_id = {definition["scheduleId"]: definition for definition in definitions}
     overrides = day_config.get("overrides", {})
     resolved: Dict[str, str] = {}
@@ -175,7 +197,17 @@ def resolve_times_for_date(
             return time_value
 
         if definition["timeMode"] == "absolute":
-            time_value = definition["baseTime"]
+            day_times = definition.get("dayTimes")
+            if isinstance(day_times, dict):
+                weekday = WEEKDAY_ORDER[compile_date.weekday()]
+                if weekday not in day_times:
+                    visiting.remove(schedule_id)
+                    raise CompilerValidationError(
+                        f"No absolute time configured for {schedule_id} on {weekday}"
+                    )
+                time_value = day_times[weekday]
+            else:
+                time_value = definition["baseTime"]
         else:
             parent_id = definition["relativeToScheduleId"]
             if parent_id not in by_id:

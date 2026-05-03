@@ -37,7 +37,7 @@ function createEmptySchedule() {
     enabled: true,
     daysOfWeek: ["MON"],
     timeMode: "absolute",
-    baseTime: "07:00",
+    dayTimes: { MON: "07:00" },
     actionType: "rule",
     parameters: {
       targetId: "",
@@ -82,6 +82,14 @@ function sanitizeSchedule(schedule) {
     daysOfWeek: Array.isArray(schedule.daysOfWeek)
       ? schedule.daysOfWeek.filter((day) => DAYS_OF_WEEK.includes(day))
       : [],
+    dayTimes:
+      schedule.dayTimes && typeof schedule.dayTimes === "object"
+        ? Object.fromEntries(
+            Object.entries(schedule.dayTimes).filter(
+              ([day, time]) => DAYS_OF_WEEK.includes(day) && typeof time === "string",
+            ),
+          )
+        : {},
     timeMode: TIME_MODES.includes(schedule.timeMode) ? schedule.timeMode : "absolute",
     baseTime: schedule.baseTime || "",
     relativeToScheduleId: schedule.relativeToScheduleId || "",
@@ -90,8 +98,11 @@ function sanitizeSchedule(schedule) {
     parameters: typeof schedule.parameters === "object" && schedule.parameters ? { ...schedule.parameters } : {},
   };
 
-  if (base.daysOfWeek.length === 0) {
+  if (base.daysOfWeek.length === 0 && Object.keys(base.dayTimes).length === 0) {
     base.daysOfWeek = ["MON"];
+  }
+  if (Object.keys(base.dayTimes).length === 0 && base.baseTime && base.daysOfWeek.length > 0) {
+    base.dayTimes = Object.fromEntries(base.daysOfWeek.map((day) => [day, base.baseTime]));
   }
 
   if (base.actionType === "rule") {
@@ -116,6 +127,7 @@ function sanitizeSchedule(schedule) {
     base.offsetMinutes = 0;
   } else {
     base.baseTime = "";
+    base.dayTimes = {};
   }
 
   return base;
@@ -153,7 +165,7 @@ export default function ScheduleConfigPanel({ authToken }) {
       };
 
       if (sanitized.timeMode === "absolute") {
-        base.baseTime = sanitized.baseTime;
+        base.dayTimes = sanitized.dayTimes;
       } else {
         base.relativeToScheduleId = sanitized.relativeToScheduleId;
         base.offsetMinutes = sanitized.offsetMinutes;
@@ -232,11 +244,17 @@ export default function ScheduleConfigPanel({ authToken }) {
     const generated = generateScheduleJson();
     const summaryByDay = DAYS_OF_WEEK.map((day) => {
       const events = generated.scheduleDefinitions
-        .filter((schedule) => schedule.enabled && Array.isArray(schedule.daysOfWeek) && schedule.daysOfWeek.includes(day))
+        .filter((schedule) => {
+          if (!schedule.enabled) return false;
+          if (schedule.timeMode === "absolute") {
+            return Boolean(schedule.dayTimes?.[day]);
+          }
+          return true;
+        })
         .map((schedule) => {
           const when =
             schedule.timeMode === "absolute"
-              ? schedule.baseTime || "N/A"
+              ? schedule.dayTimes?.[day] || "N/A"
               : `relative to ${schedule.relativeToScheduleId || "unselected"} (${schedule.offsetMinutes || 0} min)`;
           return {
             scheduleId: schedule.scheduleId,
@@ -340,8 +358,21 @@ export default function ScheduleConfigPanel({ authToken }) {
       return {
         ...current,
         daysOfWeek: nextDays,
+        dayTimes: Object.fromEntries(
+          Object.entries(current.dayTimes || {}).filter(([day]) => nextDays.includes(day)),
+        ),
       };
     });
+  }
+
+  function updateSelectedScheduleDayTime(dayCode, timeValue) {
+    updateSelectedSchedule((current) => ({
+      ...current,
+      dayTimes: {
+        ...(current.dayTimes || {}),
+        [dayCode]: timeValue,
+      },
+    }));
   }
 
   const selectedSchedule =
@@ -434,6 +465,9 @@ export default function ScheduleConfigPanel({ authToken }) {
 
           <fieldset className="day-grid-fieldset">
             <legend>Days of week</legend>
+            {selectedSchedule.timeMode === "relative" && (
+              <p className="muted">Relative schedules inherit applicable days from the linked schedule.</p>
+            )}
             <div className="day-grid">
               {DAYS_OF_WEEK.map((day) => (
                 <label key={day} className="day-option">
@@ -442,6 +476,7 @@ export default function ScheduleConfigPanel({ authToken }) {
                     type="checkbox"
                     checked={Array.isArray(selectedSchedule.daysOfWeek) && selectedSchedule.daysOfWeek.includes(day)}
                     onChange={(event) => updateSelectedScheduleDays(day, event.target.checked)}
+                    disabled={selectedSchedule.timeMode === "relative"}
                   />
                 </label>
               ))}
@@ -468,18 +503,19 @@ export default function ScheduleConfigPanel({ authToken }) {
           </label>
 
           {selectedSchedule.timeMode === "absolute" ? (
-            <label>
-              Base time (HH:mm)
-              <input
-                value={selectedSchedule.baseTime || ""}
-                onChange={(event) =>
-                  updateSelectedSchedule((current) => ({
-                    ...current,
-                    baseTime: event.target.value,
-                  }))
-                }
-              />
-            </label>
+            <fieldset className="day-grid-fieldset">
+              <legend>Time by day (HH:mm)</legend>
+              {Array.isArray(selectedSchedule.daysOfWeek) &&
+                selectedSchedule.daysOfWeek.map((day) => (
+                  <label key={`time-${day}`}>
+                    {day}
+                    <input
+                      value={selectedSchedule.dayTimes?.[day] || ""}
+                      onChange={(event) => updateSelectedScheduleDayTime(day, event.target.value)}
+                    />
+                  </label>
+                ))}
+            </fieldset>
           ) : (
             <>
               <label>
