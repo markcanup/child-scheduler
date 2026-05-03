@@ -52,6 +52,7 @@ export default function LoginPlaceholder({
     jwtPayload?.exp && Number.isFinite(jwtPayload.exp)
       ? new Date(jwtPayload.exp * 1000).toISOString()
       : "";
+  const isExpired = jwtPayload?.exp && Number.isFinite(jwtPayload.exp) ? Date.now() >= jwtPayload.exp * 1000 : false;
 
   return (
     <section className="card">
@@ -96,9 +97,10 @@ export default function LoginPlaceholder({
 
       <p className="muted">Auth status: {authToken ? "Authenticated" : "Not authenticated"}</p>
       {jwtPayload && (
-        <p className="muted">
+        <p className={isExpired ? "warning" : "muted"}>
           JWT subject: <code>{jwtPayload.sub || jwtPayload.email || "unknown"}</code>
           {expiresAt ? ` • Expires at: ${expiresAt}` : ""}
+          {isExpired ? " • Token expired; sign in again." : ""}
         </p>
       )}
     </section>

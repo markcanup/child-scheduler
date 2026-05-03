@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Alarm clock icon">
+  <circle cx="32" cy="36" r="22" fill="#f4f7ff" stroke="#2f4f9f" stroke-width="4"/>
+  <circle cx="32" cy="36" r="3" fill="#2f4f9f"/>
+  <path d="M32 36 L32 22" stroke="#2f4f9f" stroke-width="4" stroke-linecap="round"/>
+  <path d="M32 36 L42 40" stroke="#2f4f9f" stroke-width="4" stroke-linecap="round"/>
+  <path d="M16 16 L24 10" stroke="#2f4f9f" stroke-width="4" stroke-linecap="round"/>
+  <path d="M48 16 L40 10" stroke="#2f4f9f" stroke-width="4" stroke-linecap="round"/>
+  <path d="M22 56 L18 62" stroke="#2f4f9f" stroke-width="4" stroke-linecap="round"/>
+  <path d="M42 56 L46 62" stroke="#2f4f9f" stroke-width="4" stroke-linecap="round"/>
+</svg>

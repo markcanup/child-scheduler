@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 
 from functions.schedule_config_get.handler import lambda_handler
 
@@ -101,6 +102,43 @@ def test_populated_hub_state(monkeypatch):
     assert len(data["compiledPreview"]) == 1
     assert len(data["brokenReferences"]) == 1
     assert data["security"]["hubitatTokenLastRotatedAt"] == "2026-04-23T18:20:12Z"
+
+
+def test_populated_hub_state_normalizes_decimal_fields(monkeypatch):
+    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
+    monkeypatch.setenv("DEFAULT_HUB_ID", "hub-1")
+
+    items = [
+        {
+            "hubId": "hub-1",
+            "itemKey": "META",
+            "scheduleVersion": Decimal("4"),
+            "compiledAt": "2026-04-18T12:00:00Z",
+            "timezone": "America/New_York",
+        },
+        {
+            "hubId": "hub-1",
+            "itemKey": "DEF#relative",
+            "scheduleId": "relative",
+            "offsetMinutes": Decimal("5"),
+        },
+    ]
+
+    monkeypatch.setattr(
+        "functions.schedule_config_get.handler.get_schedules_table",
+        lambda: FakeTable(items=items),
+    )
+    monkeypatch.setattr(
+        "functions.schedule_config_get.handler._query_schedule_items",
+        lambda table, hub_id: items,
+    )
+
+    response = lambda_handler(_event(), None)
+
+    assert response["statusCode"] == 200
+    data = json.loads(response["body"])
+    assert data["meta"]["scheduleVersion"] == 4
+    assert data["scheduleDefinitions"][0]["offsetMinutes"] == 5
 
 
 def test_invalid_rotation_timestamp_returns_null(monkeypatch):
