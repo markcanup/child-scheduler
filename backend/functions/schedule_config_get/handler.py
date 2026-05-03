@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from shared.auth import AuthError, resolve_ui_hub_id, validate_ui_auth
@@ -53,12 +54,28 @@ def _group_schedule_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     broken_references.sort(key=lambda x: x.get("itemKey", ""))
 
     return {
-        "meta": meta,
-        "scheduleDefinitions": schedule_definitions,
-        "dayConfigs": day_configs,
-        "compiledPreview": compiled_preview,
-        "brokenReferences": broken_references,
+        "meta": _normalize_for_json(meta),
+        "scheduleDefinitions": _normalize_for_json(schedule_definitions),
+        "dayConfigs": _normalize_for_json(day_configs),
+        "compiledPreview": _normalize_for_json(compiled_preview),
+        "brokenReferences": _normalize_for_json(broken_references),
     }
+
+
+def _normalize_number(value: Decimal) -> int | float:
+    if value % 1 == 0:
+        return int(value)
+    return float(value)
+
+
+def _normalize_for_json(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return _normalize_number(value)
+    if isinstance(value, list):
+        return [_normalize_for_json(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _normalize_for_json(item) for key, item in value.items()}
+    return value
 
 
 def _normalize_rotation_timestamp(raw_value: str) -> Optional[str]:

@@ -8,7 +8,9 @@ const ACTION_TYPES = ["rule", "speech", "notify"];
 const TIME_MODES = ["absolute", "relative"];
 const RESOURCE_TYPE_ALIASES = {
   rule: "rule",
+  speech: "speechTarget",
   speechtarget: "speechTarget",
+  notify: "notifyDevice",
   notifydevice: "notifyDevice",
 };
 
@@ -127,6 +129,7 @@ export default function ScheduleConfigPanel({ authToken }) {
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [jsonText, setJsonText] = useState(JSON.stringify(defaultPayload(), null, 2));
   const [catalogResources, setCatalogResources] = useState([]);
+  const [catalogLoadedAt, setCatalogLoadedAt] = useState(0);
   const [compiledSummary, setCompiledSummary] = useState([]);
 
   function setSchedules(nextSchedules) {
@@ -197,16 +200,24 @@ export default function ScheduleConfigPanel({ authToken }) {
     setCompiledSummary([]);
   }
 
-  async function loadScheduleConfig() {
+  async function loadScheduleConfig({ forceRefreshCatalog = false } = {}) {
     setStatus("loading");
     setMessage("");
     setDiagnostics(null);
     try {
-      const [data, catalog] = await Promise.all([getScheduleConfig(authToken), getCatalog(authToken)]);
+      const shouldRefreshCatalog =
+        forceRefreshCatalog || catalogResources.length === 0 || Date.now() - catalogLoadedAt > 5 * 60 * 1000;
+      const [data, catalog] = await Promise.all([
+        getScheduleConfig(authToken),
+        shouldRefreshCatalog ? getCatalog(authToken) : Promise.resolve(null),
+      ]);
       applyLoadedSchedule(data);
-      setCatalogResources(Array.isArray(catalog?.resources) ? catalog.resources.map(normalizeCatalogResource) : []);
+      if (shouldRefreshCatalog) {
+        setCatalogResources(Array.isArray(catalog?.resources) ? catalog.resources.map(normalizeCatalogResource) : []);
+        setCatalogLoadedAt(Date.now());
+      }
       setStatus("success");
-      setMessage("Schedule loaded.");
+      setMessage(`Schedule loaded${shouldRefreshCatalog ? " with catalog refresh" : ""}.`);
     } catch (err) {
       setStatus("error");
       setMessage(err.message);

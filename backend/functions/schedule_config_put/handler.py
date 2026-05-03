@@ -53,21 +53,31 @@ def _load_current_items(schedules_table: Any, hub_id: str) -> List[Dict[str, Any
 
 def _replace_items(schedules_table: Any, hub_id: str, compile_result: Dict[str, Any]) -> None:
     existing_items = _load_current_items(schedules_table, hub_id)
+    delete_keys = []
     for item in existing_items:
         item_key = item.get("itemKey", "")
-        if item_key.startswith("DEF#") or item_key.startswith("DAY#"):
-            schedules_table.delete_item(Key={"hubId": hub_id, "itemKey": item_key})
-        if item_key.startswith("EVT#") or item_key.startswith("BROKEN#"):
-            schedules_table.delete_item(Key={"hubId": hub_id, "itemKey": item_key})
+        if any(item_key.startswith(prefix) for prefix in ("DEF#", "DAY#", "EVT#", "BROKEN#")):
+            delete_keys.append({"hubId": hub_id, "itemKey": item_key})
 
-    schedules_table.put_item(Item=compile_result["metaItem"])
-    for item in compile_result["definitionItems"]:
-        schedules_table.put_item(Item=item)
-    for item in compile_result["dayItems"]:
-        schedules_table.put_item(Item=item)
-    for item in compile_result["eventItems"]:
-        schedules_table.put_item(Item=item)
-    for item in compile_result["brokenItems"]:
+    new_items = [
+        compile_result["metaItem"],
+        *compile_result["definitionItems"],
+        *compile_result["dayItems"],
+        *compile_result["eventItems"],
+        *compile_result["brokenItems"],
+    ]
+
+    if hasattr(schedules_table, "batch_writer"):
+        with schedules_table.batch_writer() as batch:
+            for key in delete_keys:
+                batch.delete_item(Key=key)
+            for item in new_items:
+                batch.put_item(Item=item)
+        return
+
+    for key in delete_keys:
+        schedules_table.delete_item(Key=key)
+    for item in new_items:
         schedules_table.put_item(Item=item)
 
 

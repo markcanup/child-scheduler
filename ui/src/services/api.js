@@ -12,6 +12,27 @@ function buildRequestUrl(path) {
   return `${API_BASE_URL}${path}`;
 }
 
+function decodeJwtPayload(token) {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) {
+      return null;
+    }
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(normalized));
+  } catch {
+    return null;
+  }
+}
+
+function isExpiredJwt(token) {
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp || !Number.isFinite(payload.exp)) {
+    return false;
+  }
+  return Date.now() >= payload.exp * 1000;
+}
+
 async function request(path, options = {}, authToken = "") {
   const method = options.method || "GET";
   const url = buildRequestUrl(path);
@@ -53,7 +74,10 @@ async function request(path, options = {}, authToken = "") {
   const data = isJson ? await response.json() : null;
 
   if (!response.ok) {
-    const message = data?.error?.message || `Request failed (${response.status})`;
+    let message = data?.error?.message || `Request failed (${response.status})`;
+    if (response.status === 401 && authToken && isExpiredJwt(authToken)) {
+      message = "Your sign-in token is expired. Sign in again and retry.";
+    }
     const diagnostics = {
       type: "http_error",
       request: {
