@@ -168,6 +168,44 @@ def test_relative_schedule_applies_on_parent_days_without_its_own_days():
     assert [event["time"] for event in result["eventItems"]] == ["08:00", "08:15"]
 
 
+def test_relative_schedule_skips_days_when_parent_has_no_time():
+    defs = [
+        {
+            "scheduleId": "wake",
+            "name": "Wake",
+            "enabled": True,
+            "dayTimes": {"MON": "07:00", "WED": "07:00"},
+            "timeMode": "absolute",
+            "actionType": "rule",
+            "parameters": {"targetId": "rule:1"},
+        },
+        {
+            "scheduleId": "announce",
+            "name": "Announce",
+            "enabled": True,
+            "timeMode": "relative",
+            "relativeToScheduleId": "wake",
+            "offsetMinutes": 5,
+            "actionType": "speech",
+            "parameters": {"targetId": "speechTarget:1", "text": "Wake up"},
+        },
+    ]
+    result = compile_schedule(
+        hub_id="hub-1",
+        schedule_definitions=defs,
+        day_configs=[],
+        catalog=_catalog(),
+        start_date=date(2026, 4, 20),  # Monday
+        days=3,
+    )
+    assert [(event["date"], event["time"], event["sourceScheduleId"]) for event in result["eventItems"]] == [
+        ("2026-04-20", "07:00", "wake"),
+        ("2026-04-20", "07:05", "announce"),
+        ("2026-04-22", "07:00", "wake"),
+        ("2026-04-22", "07:05", "announce"),
+    ]
+
+
 def test_time_resolution_disabled_schedule_excluded():
     defs = _base_defs()
     defs[0]["enabled"] = False
