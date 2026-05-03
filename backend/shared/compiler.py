@@ -215,7 +215,15 @@ def resolve_times_for_date(
                 raise CompilerValidationError(
                     f"Relative reference unavailable for {schedule_id}: {parent_id}"
                 )
-            parent_time = resolve(parent_id)
+            try:
+                parent_time = resolve(parent_id)
+            except CompilerValidationError as exc:
+                if str(exc).startswith("No absolute time configured for"):
+                    visiting.remove(schedule_id)
+                    raise CompilerValidationError(
+                        f"Relative reference unavailable for {schedule_id}: {parent_id}"
+                    ) from exc
+                raise
             time_value = _add_minutes(parent_time, definition.get("offsetMinutes", 0))
 
         resolved[schedule_id] = time_value
@@ -227,9 +235,7 @@ def resolve_times_for_date(
         try:
             output.append({"definition": definition, "time": resolve(schedule_id)})
         except CompilerValidationError as exc:
-            if str(exc).startswith("Schedule disabled by override") or str(exc).startswith(
-                "Relative reference unavailable"
-            ):
+            if str(exc).startswith("Schedule disabled by override") or str(exc).startswith("Relative reference unavailable"):
                 continue
             raise
 

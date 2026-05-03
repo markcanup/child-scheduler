@@ -128,6 +128,7 @@ function sanitizeSchedule(schedule) {
   } else {
     base.baseTime = "";
     base.dayTimes = {};
+    base.daysOfWeek = [];
   }
 
   return base;
@@ -159,12 +160,12 @@ export default function ScheduleConfigPanel({ authToken }) {
         scheduleId: sanitized.scheduleId,
         name: sanitized.name,
         enabled: sanitized.enabled,
-        daysOfWeek: sanitized.daysOfWeek,
         timeMode: sanitized.timeMode,
         actionType: sanitized.actionType,
       };
 
       if (sanitized.timeMode === "absolute") {
+        base.daysOfWeek = sanitized.daysOfWeek;
         base.dayTimes = sanitized.dayTimes;
       } else {
         base.relativeToScheduleId = sanitized.relativeToScheduleId;
@@ -219,17 +220,16 @@ export default function ScheduleConfigPanel({ authToken }) {
     try {
       const shouldRefreshCatalog =
         forceRefreshCatalog || catalogResources.length === 0 || Date.now() - catalogLoadedAt > 5 * 60 * 1000;
-      const [data, catalog] = await Promise.all([
-        getScheduleConfig(authToken),
-        shouldRefreshCatalog ? getCatalog(authToken) : Promise.resolve(null),
-      ]);
+      const data = await getScheduleConfig(authToken);
       applyLoadedSchedule(data);
+      setStatus("success");
+      setMessage("Schedule loaded.");
       if (shouldRefreshCatalog) {
+        const catalog = await getCatalog(authToken);
         setCatalogResources(Array.isArray(catalog?.resources) ? catalog.resources.map(normalizeCatalogResource) : []);
         setCatalogLoadedAt(Date.now());
+        setMessage("Schedule and catalog loaded.");
       }
-      setStatus("success");
-      setMessage(`Schedule loaded${shouldRefreshCatalog ? " with catalog refresh" : ""}.`);
     } catch (err) {
       setStatus("error");
       setMessage(err.message);
@@ -242,27 +242,47 @@ export default function ScheduleConfigPanel({ authToken }) {
     setMessage("Generated JSON from editor state.");
     setDiagnostics(null);
     const generated = generateScheduleJson();
+    const scheduleById = Object.fromEntries(generated.scheduleDefinitions.map((schedule) => [schedule.scheduleId, schedule]));
+
+    const resolveTimeForDay = (schedule, day, visiting = new Set()) => {
+      if (schedule.timeMode === "absolute") {
+        return schedule.dayTimes?.[day] || null;
+      }
+      if (!schedule.relativeToScheduleId || visiting.has(schedule.scheduleId)) {
+        return null;
+      }
+      const parent = scheduleById[schedule.relativeToScheduleId];
+      if (!parent) {
+        return null;
+      }
+      visiting.add(schedule.scheduleId);
+      const parentTime = resolveTimeForDay(parent, day, visiting);
+      if (!parentTime) {
+        return null;
+      }
+      const [hours, minutes] = parentTime.split(":").map(Number);
+      const totalMinutes = (hours * 60 + minutes + (schedule.offsetMinutes || 0) + 24 * 60) % (24 * 60);
+      const hh = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+      const mm = String(totalMinutes % 60).padStart(2, "0");
+      return `${hh}:${mm}`;
+    };
+
     const summaryByDay = DAYS_OF_WEEK.map((day) => {
       const events = generated.scheduleDefinitions
-        .filter((schedule) => {
-          if (!schedule.enabled) return false;
-          if (schedule.timeMode === "absolute") {
-            return Boolean(schedule.dayTimes?.[day]);
-          }
-          return true;
-        })
+        .filter((schedule) => Boolean(schedule.enabled))
         .map((schedule) => {
-          const when =
-            schedule.timeMode === "absolute"
-              ? schedule.dayTimes?.[day] || "N/A"
-              : `relative to ${schedule.relativeToScheduleId || "unselected"} (${schedule.offsetMinutes || 0} min)`;
+          const when = resolveTimeForDay(schedule, day);
+          if (!when) {
+            return null;
+          }
           return {
             scheduleId: schedule.scheduleId,
             name: schedule.name || schedule.scheduleId,
             when,
             actionType: schedule.actionType,
           };
-        });
+        })
+        .filter(Boolean);
       return { day, events };
     });
     setCompiledSummary(summaryByDay);
@@ -463,26 +483,6 @@ export default function ScheduleConfigPanel({ authToken }) {
             <span className="muted schedule-id-text">Schedule ID: {selectedSchedule.scheduleId || "N/A"}</span>
           </div>
 
-          <fieldset className="day-grid-fieldset">
-            <legend>Days of week</legend>
-            {selectedSchedule.timeMode === "relative" && (
-              <p className="muted">Relative schedules inherit applicable days from the linked schedule.</p>
-            )}
-            <div className="day-grid">
-              {DAYS_OF_WEEK.map((day) => (
-                <label key={day} className="day-option">
-                  <span>{day}</span>
-                  <input
-                    type="checkbox"
-                    checked={Array.isArray(selectedSchedule.daysOfWeek) && selectedSchedule.daysOfWeek.includes(day)}
-                    onChange={(event) => updateSelectedScheduleDays(day, event.target.checked)}
-                    disabled={selectedSchedule.timeMode === "relative"}
-                  />
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
           <label>
             Time mode
             <select
@@ -501,6 +501,26 @@ export default function ScheduleConfigPanel({ authToken }) {
               ))}
             </select>
           </label>
+
+          {selectedSchedule.timeMode === "relative" ? (
+            <p className="muted">Relative schedules inherit applicable days from the linked schedule.</p>
+          ) : (
+            <fieldset className="day-grid-fieldset">
+              <legend>Days of week</legend>
+              <div className="day-grid">
+                {DAYS_OF_WEEK.map((day) => (
+                  <label key={day} className="day-option">
+                    <span>{day}</span>
+                    <input
+                      type="checkbox"
+                      checked={Array.isArray(selectedSchedule.daysOfWeek) && selectedSchedule.daysOfWeek.includes(day)}
+                      onChange={(event) => updateSelectedScheduleDays(day, event.target.checked)}
+                    />
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
 
           {selectedSchedule.timeMode === "absolute" ? (
             <fieldset className="day-grid-fieldset">
