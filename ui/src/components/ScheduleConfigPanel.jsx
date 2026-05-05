@@ -13,6 +13,46 @@ const RESOURCE_TYPE_ALIASES = {
   notify: "notifyDevice",
   notifydevice: "notifyDevice",
 };
+const TIME_DISPLAY_MODES = [
+  { value: "24h", label: "24-hour" },
+  { value: "12h", label: "12-hour (AM/PM)" },
+];
+
+function formatTimeForDisplay(time24, mode) {
+  if (typeof time24 !== "string" || !/^\d{2}:\d{2}$/.test(time24) || mode !== "12h") {
+    return time24 || "";
+  }
+  const [hh, mm] = time24.split(":").map(Number);
+  const suffix = hh >= 12 ? "PM" : "AM";
+  const hour12 = hh % 12 || 12;
+  return `${hour12}:${String(mm).padStart(2, "0")} ${suffix}`;
+}
+
+function parseTimeInputTo24Hour(inputValue, mode) {
+  const raw = String(inputValue || "").trim();
+  if (!raw) {
+    return "";
+  }
+  if (mode === "24h") {
+    return raw;
+  }
+  const match = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) {
+    return raw;
+  }
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const meridiem = match[3].toUpperCase();
+  if (hours < 1 || hours > 12 || minutes < 0 || minutes > 59) {
+    return raw;
+  }
+  if (meridiem === "AM") {
+    hours = hours % 12;
+  } else {
+    hours = hours % 12 + 12;
+  }
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
 
 function defaultPayload() {
   return {
@@ -144,6 +184,7 @@ export default function ScheduleConfigPanel({ authToken }) {
   const [catalogResources, setCatalogResources] = useState([]);
   const [catalogLoadedAt, setCatalogLoadedAt] = useState(0);
   const [compiledSummary, setCompiledSummary] = useState([]);
+  const [timeDisplayMode, setTimeDisplayMode] = useState("24h");
 
   function setSchedules(nextSchedules) {
     setScheduleConfig((current) => ({
@@ -282,7 +323,8 @@ export default function ScheduleConfigPanel({ authToken }) {
             actionType: schedule.actionType,
           };
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        .sort((a, b) => a.when.localeCompare(b.when) || a.name.localeCompare(b.name));
       return { day, events };
     });
     setCompiledSummary(summaryByDay);
@@ -311,12 +353,14 @@ export default function ScheduleConfigPanel({ authToken }) {
           .sort()
           .map((date) => ({
             day: date,
-            events: previewByDay[date].map((event) => ({
-              scheduleId: event.sourceScheduleId,
-              name: event.sourceScheduleId,
-              when: event.time,
-              actionType: event.actionType,
-            })),
+            events: previewByDay[date]
+              .map((event) => ({
+                scheduleId: event.sourceScheduleId,
+                name: event.sourceScheduleId,
+                when: event.time,
+                actionType: event.actionType,
+              }))
+              .sort((a, b) => a.when.localeCompare(b.when) || a.name.localeCompare(b.name)),
           }));
         setCompiledSummary(ordered);
         setJsonText(
@@ -530,8 +574,11 @@ export default function ScheduleConfigPanel({ authToken }) {
                   <label key={`time-${day}`}>
                     {day}
                     <input
-                      value={selectedSchedule.dayTimes?.[day] || ""}
-                      onChange={(event) => updateSelectedScheduleDayTime(day, event.target.value)}
+                      value={formatTimeForDisplay(selectedSchedule.dayTimes?.[day] || "", timeDisplayMode)}
+                      placeholder={timeDisplayMode === "12h" ? "e.g. 7:05 AM" : "e.g. 07:05"}
+                      onChange={(event) =>
+                        updateSelectedScheduleDayTime(day, parseTimeInputTo24Hour(event.target.value, timeDisplayMode))
+                      }
                     />
                   </label>
                 ))}
@@ -707,6 +754,16 @@ export default function ScheduleConfigPanel({ authToken }) {
       )}
 
       <h3>Generated JSON</h3>
+      <label>
+        Time format
+        <select value={timeDisplayMode} onChange={(event) => setTimeDisplayMode(event.target.value)}>
+          {TIME_DISPLAY_MODES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <textarea aria-label="Schedule config JSON" value={jsonText} readOnly rows={18} />
       <h3>Compiled Schedule Summary</h3>
       {compiledSummary.length === 0 ? (
@@ -722,7 +779,7 @@ export default function ScheduleConfigPanel({ authToken }) {
                 <ul>
                   {daySummary.events.map((event, idx) => (
                     <li key={`${daySummary.day}-${event.scheduleId}-${idx}`}>
-                      <strong>{event.when}</strong> — {event.name} ({event.actionType})
+                      <strong>{formatTimeForDisplay(event.when, timeDisplayMode)}</strong> — {event.name} ({event.actionType})
                     </li>
                   ))}
                 </ul>

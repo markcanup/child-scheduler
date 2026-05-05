@@ -46,7 +46,10 @@ def _load_current_version(schedules_table: Any, hub_id: str) -> int:
     meta_item = schedules_table.get_item(Key={"hubId": hub_id, "itemKey": "META"}).get("Item")
     if not meta_item:
         return 0
-    return int(meta_item.get("scheduleVersion", 0))
+    try:
+        return int(meta_item.get("scheduleVersion", 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _load_current_items(schedules_table: Any, hub_id: str) -> List[Dict[str, Any]]:
