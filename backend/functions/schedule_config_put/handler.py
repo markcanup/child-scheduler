@@ -23,6 +23,14 @@ def _parse_json_body(event: Dict[str, Any]) -> Dict[str, Any]:
     else:
         raise CompilerValidationError("Request body must be JSON")
 
+    if isinstance(parsed, str):
+        # Some clients accidentally double-encode JSON (stringified JSON inside JSON).
+        # Accept that shape to avoid hard-to-diagnose save failures.
+        try:
+            parsed = json.loads(parsed)
+        except json.JSONDecodeError as exc:
+            raise CompilerValidationError("Request body must be a JSON object") from exc
+
     if not isinstance(parsed, dict):
         raise CompilerValidationError("Request body must be a JSON object")
     return parsed

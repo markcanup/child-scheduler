@@ -140,6 +140,30 @@ def test_validation_failure(monkeypatch):
     assert data["error"]["code"] == "VALIDATION_ERROR"
 
 
+def test_double_encoded_json_body_is_accepted(monkeypatch):
+    schedules_table = FakeSchedulesTable(items=[])
+
+    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_action_catalogs_table",
+        lambda: FakeCatalogTable(item=_catalog_item()),
+    )
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_schedules_table",
+        lambda: schedules_table,
+    )
+
+    payload = _payload()
+    event = _event(payload)
+    event["body"] = json.dumps(json.dumps(payload))
+
+    response = lambda_handler(event, None)
+
+    assert response["statusCode"] == 200
+    data = json.loads(response["body"])
+    assert data["status"] == "ok"
+
+
 def test_no_action_catalog_present(monkeypatch):
     monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
     monkeypatch.setattr(
