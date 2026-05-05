@@ -250,3 +250,24 @@ def test_overwrite_previous_window(monkeypatch):
     keys = {item["itemKey"] for item in schedules_table.items}
     assert "EVT#2026-04-20#07:00#old" not in keys
     assert "BROKEN#2026-04-20#old" not in keys
+
+
+def test_malformed_existing_schedule_version_does_not_500(monkeypatch):
+    existing_items = [{"hubId": "hub-1", "itemKey": "META", "scheduleVersion": "bad-value"}]
+    schedules_table = FakeSchedulesTable(items=existing_items)
+
+    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_action_catalogs_table",
+        lambda: FakeCatalogTable(item=_catalog_item()),
+    )
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_schedules_table",
+        lambda: schedules_table,
+    )
+
+    response = lambda_handler(_event(_payload()), None)
+
+    assert response["statusCode"] == 200
+    data = json.loads(response["body"])
+    assert data["scheduleVersion"] == 1

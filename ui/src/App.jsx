@@ -16,6 +16,7 @@ const PKCE_VERIFIER_STORAGE_KEY = "childScheduler.pkceVerifier";
 const EXCHANGED_CODES_STORAGE_KEY = "childScheduler.exchangedOAuthCodes";
 let inFlightCodeExchange = null;
 let inFlightCodeValue = "";
+const APP_VERSION = __APP_VERSION__;
 
 function trimTrailingSlash(url) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
@@ -293,7 +294,7 @@ export default function App() {
     <main className="app-shell">
       <header>
         <h1>Child Scheduler</h1>
-        <p className="muted">Milestone 9: Cognito integration enabled</p>
+        <p className="muted">Version: {APP_VERSION}</p>
         <p className="muted">API Base URL: {API_BASE_URL}</p>
       </header>
 
