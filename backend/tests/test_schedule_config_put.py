@@ -271,3 +271,49 @@ def test_malformed_existing_schedule_version_does_not_500(monkeypatch):
     assert response["statusCode"] == 200
     data = json.loads(response["body"])
     assert data["scheduleVersion"] == 1
+
+
+def test_schedule_definitions_must_be_array(monkeypatch):
+    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_action_catalogs_table",
+        lambda: FakeCatalogTable(item=_catalog_item()),
+    )
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_schedules_table",
+        lambda: FakeSchedulesTable(items=[]),
+    )
+
+    payload = _payload()
+    payload["scheduleDefinitions"] = {"invalid": True}
+    response = lambda_handler(_event(payload), None)
+
+    assert response["statusCode"] == 400
+    data = json.loads(response["body"])
+    assert "scheduleDefinitions must be an array" in data["error"]["message"]
+
+
+def test_load_then_save_legacy_shape_ignores_storage_fields(monkeypatch):
+    schedules_table = FakeSchedulesTable(items=[])
+    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_action_catalogs_table",
+        lambda: FakeCatalogTable(item=_catalog_item()),
+    )
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_schedules_table",
+        lambda: schedules_table,
+    )
+
+    payload = _payload()
+    payload["scheduleDefinitions"][0]["hubId"] = "legacy-hub"
+    payload["scheduleDefinitions"][0]["itemKey"] = "DEF#wake"
+    payload["dayConfigs"] = [{"hubId": "legacy-hub", "itemKey": "DAY#2026-05-01", "date": "2026-05-01"}]
+
+    response = lambda_handler(_event(payload), None)
+
+    assert response["statusCode"] == 200
+    stored_definition = next(item for item in schedules_table.items if item["itemKey"] == "DEF#wake")
+    stored_day_config = next(item for item in schedules_table.items if item["itemKey"] == "DAY#2026-05-01")
+    assert stored_definition["hubId"] == "hub-1"
+    assert stored_day_config["hubId"] == "hub-1"
