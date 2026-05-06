@@ -98,10 +98,21 @@ def _load_current_items(schedules_table: Any, hub_id: str) -> List[Dict[str, Any
 
 def _replace_items(schedules_table: Any, hub_id: str, compile_result: Dict[str, Any]) -> None:
     existing_items = _load_current_items(schedules_table, hub_id)
+    new_item_keys = {
+        item["itemKey"]
+        for item in [
+            compile_result["metaItem"],
+            *compile_result["definitionItems"],
+            *compile_result["dayItems"],
+            *compile_result["eventItems"],
+            *compile_result["brokenItems"],
+        ]
+    }
+
     delete_keys = []
     for item in existing_items:
         item_key = item.get("itemKey", "")
-        if any(item_key.startswith(prefix) for prefix in ("DEF#", "DAY#", "EVT#", "BROKEN#")):
+        if any(item_key.startswith(prefix) for prefix in ("DEF#", "DAY#", "EVT#", "BROKEN#")) and item_key not in new_item_keys:
             delete_keys.append({"hubId": hub_id, "itemKey": item_key})
 
     new_items = [
