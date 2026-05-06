@@ -317,3 +317,52 @@ def test_load_then_save_legacy_shape_ignores_storage_fields(monkeypatch):
     stored_day_config = next(item for item in schedules_table.items if item["itemKey"] == "DAY#2026-05-01")
     assert stored_definition["hubId"] == "hub-1"
     assert stored_day_config["hubId"] == "hub-1"
+
+
+def test_speech_action_empty_text_returns_validation_error(monkeypatch):
+    schedules_table = FakeSchedulesTable(items=[])
+    payload = _payload()
+    payload["scheduleDefinitions"][1]["parameters"]["text"] = ""
+
+    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_action_catalogs_table",
+        lambda: FakeCatalogTable(item=_catalog_item()),
+    )
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_schedules_table",
+        lambda: schedules_table,
+    )
+
+    response = lambda_handler(_event(payload), None)
+
+    assert response["statusCode"] == 400
+    data = json.loads(response["body"])
+    assert "parameters.text" in data["error"]["message"]
+
+
+def test_internal_error_returns_debug_details(monkeypatch):
+    class ExplodingSchedulesTable(FakeSchedulesTable):
+        def put_item(self, Item):  # noqa: ARG002
+            raise RuntimeError("ddb write failed")
+
+    schedules_table = ExplodingSchedulesTable(items=[])
+    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_action_catalogs_table",
+        lambda: FakeCatalogTable(item=_catalog_item()),
+    )
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_schedules_table",
+        lambda: schedules_table,
+    )
+
+    event = _event(_payload())
+    event["requestContext"]["requestId"] = "req-123"
+    response = lambda_handler(event, None)
+
+    assert response["statusCode"] == 500
+    data = json.loads(response["body"])
+    assert data["error"]["code"] == "INTERNAL_ERROR"
+    assert data["error"]["details"]["requestId"] == "req-123"
+    assert data["error"]["details"]["exceptionType"] == "RuntimeError"
