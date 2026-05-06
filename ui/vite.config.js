@@ -54,6 +54,7 @@ export default defineConfig({
       host,
       port,
       https,
+      allowedHosts: true,
       hmr: hmrHost || hmrPort
         ? {
             host: hmrHost,
