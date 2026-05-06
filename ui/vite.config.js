@@ -27,6 +27,9 @@ export default defineConfig({
     const host = process.env.VITE_HOST ?? "0.0.0.0";
     const port = Number(process.env.VITE_PORT ?? 5173);
     const hmrHost = process.env.VITE_HMR_HOST;
+    const hmrPort = process.env.VITE_HMR_PORT
+      ? Number(process.env.VITE_HMR_PORT)
+      : undefined;
     const keyPath = process.env.VITE_SSL_KEY_PATH;
     const certPath = process.env.VITE_SSL_CERT_PATH;
 
@@ -51,10 +54,11 @@ export default defineConfig({
       host,
       port,
       https,
-      hmr: hmrHost
+      hmr: hmrHost || hmrPort
         ? {
             host: hmrHost,
             protocol: https ? "wss" : "ws",
+            clientPort: hmrPort,
           }
         : undefined,
     };
