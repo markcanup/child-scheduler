@@ -42,6 +42,39 @@ def _require_fields(payload: Dict[str, Any], fields: List[str]) -> None:
         raise CompilerValidationError(f"Missing required field(s): {', '.join(missing)}")
 
 
+def _sanitize_schedule_definitions(raw_value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(raw_value, list):
+        raise CompilerValidationError("scheduleDefinitions must be an array")
+
+    sanitized = []
+    for entry in raw_value:
+        if not isinstance(entry, dict):
+            raise CompilerValidationError("Each schedule definition must be an object")
+        clean_entry = {key: value for key, value in entry.items() if key not in {"hubId", "itemKey"}}
+        sanitized.append(clean_entry)
+    return sanitized
+
+
+def _sanitize_day_configs(raw_value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(raw_value, list):
+        raise CompilerValidationError("dayConfigs must be an array")
+
+    sanitized = []
+    for entry in raw_value:
+        if not isinstance(entry, dict):
+            raise CompilerValidationError("Each day config must be an object")
+        clean_entry = {key: value for key, value in entry.items() if key not in {"hubId", "itemKey"}}
+        sanitized.append(clean_entry)
+    return sanitized
+
+
+def _normalize_payload_for_compile(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "scheduleDefinitions": _sanitize_schedule_definitions(payload.get("scheduleDefinitions")),
+        "dayConfigs": _sanitize_day_configs(payload.get("dayConfigs")),
+    }
+
+
 def _load_current_version(schedules_table: Any, hub_id: str) -> int:
     meta_item = schedules_table.get_item(Key={"hubId": hub_id, "itemKey": "META"}).get("Item")
     if not meta_item:
@@ -98,6 +131,7 @@ def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
         payload = _parse_json_body(event)
 
         _require_fields(payload, ["meta", "scheduleDefinitions", "dayConfigs"])
+        normalized_payload = _normalize_payload_for_compile(payload)
         hub_id = payload.get("hubId") or resolve_ui_hub_id(event, claims)
 
         catalog_table = get_action_catalogs_table()
@@ -111,8 +145,8 @@ def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
 
         compile_result = compile_schedule(
             hub_id=hub_id,
-            schedule_definitions=payload["scheduleDefinitions"],
-            day_configs=payload["dayConfigs"],
+            schedule_definitions=normalized_payload["scheduleDefinitions"],
+            day_configs=normalized_payload["dayConfigs"],
             catalog=catalog_item,
             schedule_version=next_version,
             timezone="America/New_York",
