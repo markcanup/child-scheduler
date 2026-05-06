@@ -38,6 +38,41 @@ class FakeSchedulesTable:
         self.items.append(Item)
 
 
+class FakeBatchWriterSchedulesTable(FakeSchedulesTable):
+    class _BatchWriter:
+        def __init__(self, outer):
+            self.outer = outer
+            self.ops = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
+            if exc_type is not None:
+                return False
+            seen = set()
+            for op_type, key, item in self.ops:
+                identity = (key["hubId"], key["itemKey"])
+                if identity in seen:
+                    raise RuntimeError("Provided list of item keys contains duplicates")
+                seen.add(identity)
+                if op_type == "delete":
+                    self.outer.delete_item(key)
+                else:
+                    self.outer.put_item(item)
+            return False
+
+        def delete_item(self, Key):
+            self.ops.append(("delete", Key, None))
+
+        def put_item(self, Item):
+            key = {"hubId": Item["hubId"], "itemKey": Item["itemKey"]}
+            self.ops.append(("put", key, Item))
+
+    def batch_writer(self):
+        return FakeBatchWriterSchedulesTable._BatchWriter(self)
+
+
 def _event(body, token="ui-token", with_claims=True):
     event = {
         "headers": {"Authorization": f"Bearer {token}"},
@@ -366,3 +401,27 @@ def test_internal_error_returns_debug_details(monkeypatch):
     assert data["error"]["code"] == "INTERNAL_ERROR"
     assert data["error"]["details"]["requestId"] == "req-123"
     assert data["error"]["details"]["exceptionType"] == "RuntimeError"
+
+
+def test_batch_writer_does_not_send_duplicate_keys(monkeypatch):
+    existing_items = [
+        {"hubId": "hub-1", "itemKey": "DEF#wake"},
+        {"hubId": "hub-1", "itemKey": "DAY#2026-05-01", "date": "2026-05-01"},
+    ]
+    schedules_table = FakeBatchWriterSchedulesTable(items=existing_items)
+    payload = _payload()
+    payload["dayConfigs"] = [{"date": "2026-05-01"}]
+
+    monkeypatch.setenv("UI_JWT_STUB_TOKEN", "ui-token")
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_action_catalogs_table",
+        lambda: FakeCatalogTable(item=_catalog_item()),
+    )
+    monkeypatch.setattr(
+        "functions.schedule_config_put.handler.get_schedules_table",
+        lambda: schedules_table,
+    )
+
+    response = lambda_handler(_event(payload), None)
+
+    assert response["statusCode"] == 200
