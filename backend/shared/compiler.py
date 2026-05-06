@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 VALID_ACTION_TYPES = {"rule", "speech", "notify"}
 VALID_TIME_MODES = {"absolute", "relative"}
 VALID_DAYS = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}
 WEEKDAY_ORDER = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+RULE_TARGET_RE = re.compile(r"^rule:\d+$")
+SPEECH_TARGET_RE = re.compile(r"^speechTarget:\d+$")
+NOTIFY_TARGET_RE = re.compile(r"^notifyDevice:\d+$")
 
 
 @dataclass
@@ -65,6 +69,7 @@ def validate_schedule_definitions(schedule_definitions: List[Dict[str, Any]]) ->
 
         if not isinstance(definition.get("parameters"), dict):
             raise CompilerValidationError(f"Missing required field: parameters for {schedule_id}")
+        _validate_action_parameters(schedule_id, action_type, definition["parameters"])
 
         if time_mode == "absolute":
             day_times = definition.get("dayTimes")
@@ -107,6 +112,44 @@ def validate_schedule_definitions(schedule_definitions: List[Dict[str, Any]]) ->
                 raise CompilerValidationError(
                     f"Relative reference missing for {definition['scheduleId']}: {relative_id}"
                 )
+
+
+def _validate_action_parameters(schedule_id: str, action_type: str, parameters: Dict[str, Any]) -> None:
+    if action_type == "rule":
+        target_id = parameters.get("targetId")
+        if not isinstance(target_id, str) or not target_id:
+            raise CompilerValidationError(f"Missing required field: parameters.targetId for {schedule_id}")
+        if not RULE_TARGET_RE.match(target_id):
+            raise CompilerValidationError(f"Invalid targetId for {schedule_id}: {target_id}")
+        return
+
+    if action_type == "speech":
+        target_id = parameters.get("targetId")
+        text = parameters.get("text")
+        if not isinstance(target_id, str) or not target_id:
+            raise CompilerValidationError(f"Missing required field: parameters.targetId for {schedule_id}")
+        if not SPEECH_TARGET_RE.match(target_id):
+            raise CompilerValidationError(f"Invalid targetId for {schedule_id}: {target_id}")
+        if not isinstance(text, str) or not text.strip():
+            raise CompilerValidationError(f"Missing required field: parameters.text for {schedule_id}")
+        if len(text) > 500:
+            raise CompilerValidationError(f"parameters.text exceeds 500 characters for {schedule_id}")
+        return
+
+    if action_type == "notify":
+        target_ids = parameters.get("targetIds")
+        text = parameters.get("text")
+        if not isinstance(target_ids, list) or not target_ids:
+            raise CompilerValidationError(f"Missing required field: parameters.targetIds for {schedule_id}")
+        if len(target_ids) > 10:
+            raise CompilerValidationError(f"parameters.targetIds exceeds 10 entries for {schedule_id}")
+        for target_id in target_ids:
+            if not isinstance(target_id, str) or not NOTIFY_TARGET_RE.match(target_id):
+                raise CompilerValidationError(f"Invalid notify targetId for {schedule_id}: {target_id}")
+        if not isinstance(text, str) or not text.strip():
+            raise CompilerValidationError(f"Missing required field: parameters.text for {schedule_id}")
+        if len(text) > 500:
+            raise CompilerValidationError(f"parameters.text exceeds 500 characters for {schedule_id}")
 
 
 def validate_day_configs(day_configs: List[Dict[str, Any]]) -> None:

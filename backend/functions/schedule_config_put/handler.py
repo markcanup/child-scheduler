@@ -1,4 +1,5 @@
 import json
+import traceback
 from datetime import date
 from typing import Any, Dict, List
 
@@ -181,5 +182,25 @@ def lambda_handler(event: Dict[str, Any], _context: Any) -> Dict[str, Any]:
         )
     except CompilerValidationError as exc:
         return json_response(400, exc.as_error(), event=event)
-    except Exception:
-        return error_response(500, "INTERNAL_ERROR", "Unexpected server error", event=event)
+    except Exception as exc:
+        request_id = (
+            event.get("requestContext", {}).get("requestId")
+            or event.get("requestContext", {}).get("aws_request_id")
+            or "unknown"
+        )
+        print(  # noqa: T201
+            f"schedule_config_put unexpected error requestId={request_id} "
+            f"type={type(exc).__name__} message={exc}"
+        )
+        print(traceback.format_exc())  # noqa: T201
+        return error_response(
+            500,
+            "INTERNAL_ERROR",
+            "Unexpected server error",
+            event=event,
+            details={
+                "requestId": request_id,
+                "exceptionType": type(exc).__name__,
+                "exceptionMessage": str(exc),
+            },
+        )
